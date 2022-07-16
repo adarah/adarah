@@ -131,9 +131,13 @@ const Interpreter = struct {
 
     pub fn add(self: *Self, registerX: u4, registerY: u4) void {
         const overflow = @addWithOverflow(u8, self.V[registerX], self.V[registerY], &self.V[registerX]);
-        if (overflow) {
-            self.V[0xF] = 1;
-        }
+        self.V[0xF] = @boolToInt(overflow);
+        self.PC += 2;
+    }
+
+    pub fn sub(self: *Self, registerX: u4, registerY: u4) void {
+        const underflow = @subWithOverflow(u8, self.V[registerX], self.V[registerY], &self.V[registerX]);
+        self.V[0xF] = @boolToInt(!underflow);
         self.PC += 2;
     }
 };
@@ -142,6 +146,7 @@ const Interpreter = struct {
 
 const expect = std.testing.expect;
 const expectError = std.testing.expectError;
+const print = std.debug.print;
 
 test "Interpreter inits fonts" {
     var vm = Interpreter.init();
@@ -322,4 +327,30 @@ test "Interpreter adds registers VX and VY" {
     try expect(vm.V[0xA] == 0x04);
     try expect(vm.V[0xF] == 1);
     try expect(vm.PC == 0x204);
+
+    vm.add(0xA, 0xB);
+    try expect(vm.V[0xA] == 0xE);
+    try expect(vm.V[0xF] == 0);
+    try expect(vm.PC == 0x206);
+}
+
+test "Interpreter subs registers VX and VY" {
+    var vm = Interpreter.init();
+    vm.V[0xA] = 0x0F;
+    vm.V[0xB] = 0x09;
+
+    vm.sub(0xA, 0xB);
+    try expect(vm.V[0xA] == 0x06);
+    try expect(vm.V[0xF] == 1);
+    try expect(vm.PC == 0x202);
+
+    vm.sub(0xA, 0xB);
+    try expect(vm.V[0xA] == 0xFD);
+    try expect(vm.V[0xF] == 0);
+    try expect(vm.PC == 0x204);
+
+    vm.sub(0xA, 0xB);
+    try expect(vm.V[0xA] == 0xF4);
+    try expect(vm.V[0xF] == 1);
+    try expect(vm.PC == 0x206);
 }
