@@ -1,4 +1,6 @@
 const std = @import("std");
+const fmt = std.fmt;
+const panic = std.debug.panic;
 
 const Interpreter = struct {
     const mem_size = 4096;
@@ -63,6 +65,12 @@ const Interpreter = struct {
 
     // Instructions
 
+    pub fn syscall(self: *Self, code: u16) !void {
+        _ = self;
+        _ = code;
+        return error.NotImplemented;
+    }
+
     pub fn callSubroutine(self: *Self, address: u16) void {
         self.stack[self.SP] = self.PC;
         self.PC = address;
@@ -85,7 +93,11 @@ const Interpreter = struct {
     }
 };
 
+// Tests
+
 const expect = std.testing.expect;
+const expectError = std.testing.expectError;
+
 test "Interpreter inits correctly" {
     var vm = Interpreter.init();
     // Fonts are initilizied
@@ -97,14 +109,9 @@ test "Interpreter inits correctly" {
     }
 }
 
-test "Interpreter calls subroutine" {
+test "Interpreter makes syscall" {
     var vm = Interpreter.init();
-    try expect(vm.PC == 0x200);
-    try expect(vm.SP == 0);
-    vm.callSubroutine(0x300);
-    try expect(vm.PC == 0x300);
-    try expect(vm.SP == 1);
-    try expect(vm.stackPeek() == 0x200);
+    try expectError(error.NotImplemented, vm.syscall(0x300));
 }
 
 test "Interpreter clears screens" {
@@ -137,4 +144,14 @@ test "Interpreter jumps to address" {
     vm.PC = 0x200;
     vm.jump(0x300);
     try expect(vm.PC == 0x300);
+}
+
+test "Interpreter calls subroutine" {
+    var vm = Interpreter.init();
+    try expect(vm.PC == 0x200);
+    try expect(vm.SP == 0);
+    vm.callSubroutine(0x300);
+    try expect(vm.PC == 0x300);
+    try expect(vm.SP == 1);
+    try expect(vm.stackPeek() == 0x200);
 }
