@@ -123,6 +123,11 @@ const Interpreter = struct {
         self.V[registerX] &= self.V[registerY];
         self.PC += 2;
     }
+
+    pub fn bitwiseXor(self: *Self, registerX: u4, registerY: u4) void {
+        self.V[registerX] ^= self.V[registerY];
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -268,7 +273,7 @@ test "Interpreter stores value from VY into VX" {
     try expect(vm.PC == 0x202);
 }
 
-test "Interpreter bitiwse ORs VX and VY" {
+test "Interpreter bitwise ORs VX and VY" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0b0110;
     vm.V[0xB] = 0b1001;
@@ -277,11 +282,20 @@ test "Interpreter bitiwse ORs VX and VY" {
     try expect(vm.PC == 0x202);
 }
 
-test "Interpreter bitiwse ANDs VX and VY" {
+test "Interpreter bitwise ANDs VX and VY" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0b0110;
     vm.V[0xB] = 0b1001;
     vm.bitwiseAnd(0xA, 0xB);
     try expect(vm.V[0xA] == 0b0000);
+    try expect(vm.PC == 0x202);
+}
+
+test "Interpreter bitwise XORs VX and VY" {
+    var vm = Interpreter.init();
+    vm.V[0xA] = 0b1010;
+    vm.V[0xB] = 0b1001;
+    vm.bitwiseXor(0xA, 0xB);
+    try expect(vm.V[0xA] == 0b0011);
     try expect(vm.PC == 0x202);
 }
