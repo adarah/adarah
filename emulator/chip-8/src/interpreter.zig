@@ -84,6 +84,13 @@ const Interpreter = struct {
         }
         self.PC += 2;
     }
+
+    pub fn skipIfNotEqual(self: *Self, register: u4, value: u8) void {
+        if (self.V[register] != value) {
+            self.PC += 2;
+        }
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -167,5 +174,16 @@ test "Interpreter skips next instruction if equal" {
     try expect(vm.PC == 0x204);
 
     vm.skipIfEqual(0xA, 0xAB);
+    try expect(vm.PC == 0x206);
+}
+
+test "Interpreter skips next instruction if not equal" {
+    var vm = Interpreter.init();
+    vm.V[0xA] = 0xFF;
+
+    vm.skipIfNotEqual(0xA, 0xBC);
+    try expect(vm.PC == 0x204);
+
+    vm.skipIfNotEqual(0xA, 0xFF);
     try expect(vm.PC == 0x206);
 }
