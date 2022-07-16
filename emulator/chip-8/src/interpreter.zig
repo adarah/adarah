@@ -146,6 +146,12 @@ const Interpreter = struct {
         self.V[0xF] = self.V[registerY] & 1;
         self.PC += 2;
     }
+
+    pub fn subStore(self: *Self, registerX: u4, registerY: u4) void {
+        const underflow = @subWithOverflow(u8, self.V[registerY], self.V[registerX], &self.V[registerX]);
+        self.V[0xF] = @boolToInt(!underflow);
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -164,12 +170,12 @@ test "Interpreter inits fonts" {
     }
 }
 
-test "Interpreter makes syscall" {
+test "Interpreter makes syscall (0NNN)" {
     var vm = Interpreter.init();
     try expectError(error.NotImplemented, vm.syscall(0x300));
 }
 
-test "Interpreter clears screens" {
+test "Interpreter clears screens (00E0)" {
     var vm = Interpreter.init();
     for (vm.screen()) |*b, i| {
         b.* = @intCast(u8, i);
@@ -182,7 +188,7 @@ test "Interpreter clears screens" {
     try expect(vm.PC == 0x202);
 }
 
-test "Interpreter returns from subroutine" {
+test "Interpreter returns from subroutine (00EE)" {
     var vm = Interpreter.init();
 
     vm.stack[0] = 0x500;
@@ -198,7 +204,7 @@ test "Interpreter returns from subroutine" {
     try expect(vm.PC == 0x500);
 }
 
-test "Interpreter jumps to address" {
+test "Interpreter jumps to address (1NNN)" {
     var vm = Interpreter.init();
 
     vm.jump(0x300);
@@ -208,7 +214,7 @@ test "Interpreter jumps to address" {
     try expect(vm.PC == 0x500);
 }
 
-test "Interpreter calls subroutine" {
+test "Interpreter calls subroutine (2NNN)" {
     var vm = Interpreter.init();
 
     vm.callSubroutine(0x300);
@@ -222,7 +228,7 @@ test "Interpreter calls subroutine" {
     try expect(vm.stackPeek() == 0x300);
 }
 
-test "Interpreter skips next instruction if VX equals literal" {
+test "Interpreter skips next instruction if VX equals literal (3XNN)" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0xFF;
 
@@ -233,7 +239,7 @@ test "Interpreter skips next instruction if VX equals literal" {
     try expect(vm.PC == 0x206);
 }
 
-test "Interpreter skips next instruction if VX not equals literal" {
+test "Interpreter skips next instruction if VX not equals literal (4XNN)" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0xFF;
 
@@ -244,7 +250,7 @@ test "Interpreter skips next instruction if VX not equals literal" {
     try expect(vm.PC == 0x206);
 }
 
-test "Interpreter skips next instruction if VX equals VY" {
+test "Interpreter skips next instruction if VX equals VY (5XY0)" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0xFF;
     vm.V[0xB] = 0xFF;
@@ -258,7 +264,7 @@ test "Interpreter skips next instruction if VX equals VY" {
     try expect(vm.PC == 0x206);
 }
 
-test "Interpreter stores literal into register" {
+test "Interpreter stores literal into register (6XNN)" {
     var vm = Interpreter.init();
 
     vm.storeLiteral(0xA, 0xFF);
@@ -270,7 +276,7 @@ test "Interpreter stores literal into register" {
     try expect(vm.PC == 0x204);
 }
 
-test "Interpreter adds literal into register" {
+test "Interpreter adds literal into register (7XNN)" {
     var vm = Interpreter.init();
 
     vm.addLiteral(0xA, 0xFA);
@@ -283,7 +289,7 @@ test "Interpreter adds literal into register" {
     try expect(vm.PC == 0x204);
 }
 
-test "Interpreter stores value from VY into VX" {
+test "Interpreter stores value from VY into VX (8XY0)" {
     var vm = Interpreter.init();
     vm.V[0xB] = 0xBB;
 
@@ -292,7 +298,7 @@ test "Interpreter stores value from VY into VX" {
     try expect(vm.PC == 0x202);
 }
 
-test "Interpreter bitwise ORs VX and VY" {
+test "Interpreter bitwise ORs VX and VY (8XY1)" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0b0110;
     vm.V[0xB] = 0b1001;
@@ -301,7 +307,7 @@ test "Interpreter bitwise ORs VX and VY" {
     try expect(vm.PC == 0x202);
 }
 
-test "Interpreter bitwise ANDs VX and VY" {
+test "Interpreter bitwise ANDs VX and VY (8XY2)" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0b0110;
     vm.V[0xB] = 0b1001;
@@ -310,7 +316,7 @@ test "Interpreter bitwise ANDs VX and VY" {
     try expect(vm.PC == 0x202);
 }
 
-test "Interpreter bitwise XORs VX and VY" {
+test "Interpreter bitwise XORs VX and VY (8XY3)" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0b1010;
     vm.V[0xB] = 0b1001;
@@ -319,7 +325,7 @@ test "Interpreter bitwise XORs VX and VY" {
     try expect(vm.PC == 0x202);
 }
 
-test "Interpreter adds registers VX and VY and sets VF if overflow" {
+test "Interpreter adds registers VX and VY and sets VF if overflow (8XY4)" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0xF0;
     vm.V[0xB] = 0x0A;
@@ -340,7 +346,7 @@ test "Interpreter adds registers VX and VY and sets VF if overflow" {
     try expect(vm.PC == 0x206);
 }
 
-test "Interpreter subs registers VX and VY and sets VF if no underflow" {
+test "Interpreter subs registers VX and VY and sets VF if no underflow (8XY5)" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0x0F;
     vm.V[0xB] = 0x09;
@@ -361,7 +367,7 @@ test "Interpreter subs registers VX and VY and sets VF if no underflow" {
     try expect(vm.PC == 0x206);
 }
 
-test "Interpreter right shifts VY into VX and sets VF to the LSB" {
+test "Interpreter right shifts VY into VX and sets VF to the LSB (8XY6)" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0;
     vm.V[0xB] = 0b1101;
@@ -378,4 +384,27 @@ test "Interpreter right shifts VY into VX and sets VF to the LSB" {
     try expect(vm.V[0xB] == 0b0010);
     try expect(vm.V[0xF] == 0);
     try expect(vm.PC == 0x204);
+}
+
+test "Interpreter sets VX to 'VY - VX' (8XY7) and sets VF if no underflow" {
+    var vm = Interpreter.init();
+    vm.V[0xA] = 0x09;
+    vm.V[0xB] = 0x0A;
+
+    vm.subStore(0xA, 0xB);
+    try expect(vm.V[0xA] == 0x01);
+    try expect(vm.V[0xF] == 1);
+    try expect(vm.PC == 0x202);
+
+    vm.V[0xA] = 0xC;
+    vm.subStore(0xA, 0xB);
+    try expect(vm.V[0xA] == 0xFE);
+    try expect(vm.V[0xF] == 0);
+    try expect(vm.PC == 0x204);
+
+    vm.V[0xA] = 0x3;
+    vm.subStore(0xA, 0xB);
+    try expect(vm.V[0xA] == 0x07);
+    try expect(vm.V[0xF] == 1);
+    try expect(vm.PC == 0x206);
 }
