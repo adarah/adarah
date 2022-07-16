@@ -152,6 +152,12 @@ const Interpreter = struct {
         self.V[0xF] = @boolToInt(!underflow);
         self.PC += 2;
     }
+
+    pub fn shiftLeft(self: *Self, registerX: u4, registerY: u4) void {
+        const overflow = @shlWithOverflow(u8, self.V[registerY], 1, &self.V[registerX]);
+        self.V[0xF] = @boolToInt(overflow);
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -386,7 +392,7 @@ test "Interpreter right shifts VY into VX and sets VF to the LSB (8XY6)" {
     try expect(vm.PC == 0x204);
 }
 
-test "Interpreter sets VX to 'VY - VX' (8XY7) and sets VF if no underflow" {
+test "Interpreter sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0x09;
     vm.V[0xB] = 0x0A;
@@ -407,4 +413,24 @@ test "Interpreter sets VX to 'VY - VX' (8XY7) and sets VF if no underflow" {
     try expect(vm.V[0xA] == 0x07);
     try expect(vm.V[0xF] == 1);
     try expect(vm.PC == 0x206);
+}
+
+test "Interpreter left shifts VY into VX and sets VF to the MSB (8XYE)" {
+    var vm = Interpreter.init();
+    vm.V[0xA] = 0;
+    vm.V[0xB] = 0b11011111;
+
+    vm.shiftLeft(0xA, 0xB);
+    print("\n{d}\n", .{vm.V[0xA]});
+    try expect(vm.V[0xA] == 0b10111110);
+    try expect(vm.V[0xB] == 0b11011111);
+    try expect(vm.V[0xF] == 1);
+    try expect(vm.PC == 0x202);
+
+    vm.V[0xB] = 0b00101111;
+    vm.shiftLeft(0xA, 0xB);
+    try expect(vm.V[0xA] == 0b01011110);
+    try expect(vm.V[0xB] == 0b00101111);
+    try expect(vm.V[0xF] == 0);
+    try expect(vm.PC == 0x204);
 }
