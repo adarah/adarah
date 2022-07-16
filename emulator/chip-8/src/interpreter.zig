@@ -91,6 +91,13 @@ const Interpreter = struct {
         }
         self.PC += 2;
     }
+
+    pub fn skipIfRegistersEqual(self: *Self, registerX: u4, registerY: u4) void {
+        if (self.V[registerX] == self.V[registerY]) {
+            self.PC += 2;
+        }
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -166,7 +173,7 @@ test "Interpreter calls subroutine" {
     try expect(vm.stackPeek() == 0x300);
 }
 
-test "Interpreter skips next instruction if equal" {
+test "Interpreter skips next instruction if VX equals NN" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0xFF;
 
@@ -177,7 +184,7 @@ test "Interpreter skips next instruction if equal" {
     try expect(vm.PC == 0x206);
 }
 
-test "Interpreter skips next instruction if not equal" {
+test "Interpreter skips next instruction if VX not equals NN" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0xFF;
 
@@ -185,5 +192,19 @@ test "Interpreter skips next instruction if not equal" {
     try expect(vm.PC == 0x204);
 
     vm.skipIfNotEqual(0xA, 0xFF);
+    try expect(vm.PC == 0x206);
+}
+
+test "Interpreter skips next instruction if VX equals VY" {
+    var vm = Interpreter.init();
+    vm.V[0xA] = 0xFF;
+    vm.V[0xB] = 0xFF;
+
+    vm.skipIfRegistersEqual(0xA, 0xB);
+    try expect(vm.PC == 0x204);
+
+    vm.V[0xB] = 0x21;
+
+    vm.skipIfRegistersEqual(0xA, 0xB);
     try expect(vm.PC == 0x206);
 }
