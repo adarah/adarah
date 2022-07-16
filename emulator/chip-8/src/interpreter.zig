@@ -10,22 +10,7 @@ const Interpreter = struct {
     SP: u8 = 0,
 
     // Registers
-    V0: u8 = 0,
-    V1: u8 = 0,
-    V2: u8 = 0,
-    V3: u8 = 0,
-    V4: u8 = 0,
-    V5: u8 = 0,
-    V6: u8 = 0,
-    V7: u8 = 0,
-    V8: u8 = 0,
-    V9: u8 = 0,
-    VA: u8 = 0,
-    VB: u8 = 0,
-    VC: u8 = 0,
-    VD: u8 = 0,
-    VE: u8 = 0,
-    VF: u8 = 0,
+    V: [16]u8 = std.mem.zeroes([16]u8),
     I: u16 = 0,
 
     const Self = @This();
@@ -73,14 +58,15 @@ const Interpreter = struct {
 
     pub fn callSubroutine(self: *Self, address: u16) void {
         self.stack[self.SP] = self.PC;
-        self.PC = address;
         self.SP += 1;
+        self.PC = address;
     }
 
     pub fn clearScreen(self: *Self) void {
         for (self.screen()) |*b| {
             b.* = 0;
         }
+        self.PC += 2;
     }
 
     pub fn returnFromSubroutine(self: *Self) void {
@@ -91,6 +77,13 @@ const Interpreter = struct {
     pub fn jump(self: *Self, address: u16) void {
         self.PC = address;
     }
+
+    pub fn skipIfEqual(self: *Self, register: u4, value: u8) void {
+        if (self.V[register] == value) {
+            self.PC += 2;
+        }
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -98,9 +91,8 @@ const Interpreter = struct {
 const expect = std.testing.expect;
 const expectError = std.testing.expectError;
 
-test "Interpreter inits correctly" {
+test "Interpreter inits fonts" {
     var vm = Interpreter.init();
-    // Fonts are initilizied
     for (vm.mem) |byte, i| {
         if (i >= 0x50) {
             break;
@@ -116,24 +108,29 @@ test "Interpreter makes syscall" {
 
 test "Interpreter clears screens" {
     var vm = Interpreter.init();
-    var screen = vm.mem[4096 - 256 ..];
-    for (screen) |*b, i| {
+    for (vm.screen()) |*b, i| {
         b.* = @intCast(u8, i);
     }
+
     vm.clearScreen();
-    for (screen) |b| {
+    for (vm.screen()) |b| {
         try expect(b == 0);
     }
+    try expect(vm.PC == 0x202);
 }
 
 test "Interpreter returns from subroutine" {
     var vm = Interpreter.init();
 
     vm.stack[0] = 0x500;
-    vm.SP = 1;
+    vm.stack[1] = 0x800;
+    vm.SP = 2;
 
     vm.returnFromSubroutine();
+    try expect(vm.SP == 1);
+    try expect(vm.PC == 0x800);
 
+    vm.returnFromSubroutine();
     try expect(vm.SP == 0);
     try expect(vm.PC == 0x500);
 }
@@ -141,17 +138,34 @@ test "Interpreter returns from subroutine" {
 test "Interpreter jumps to address" {
     var vm = Interpreter.init();
 
-    vm.PC = 0x200;
     vm.jump(0x300);
     try expect(vm.PC == 0x300);
+
+    vm.jump(0x500);
+    try expect(vm.PC == 0x500);
 }
 
 test "Interpreter calls subroutine" {
     var vm = Interpreter.init();
-    try expect(vm.PC == 0x200);
-    try expect(vm.SP == 0);
+
     vm.callSubroutine(0x300);
     try expect(vm.PC == 0x300);
     try expect(vm.SP == 1);
     try expect(vm.stackPeek() == 0x200);
+
+    vm.callSubroutine(0x500);
+    try expect(vm.PC == 0x500);
+    try expect(vm.SP == 2);
+    try expect(vm.stackPeek() == 0x300);
+}
+
+test "Interpreter skips next instruction if equal" {
+    var vm = Interpreter.init();
+    vm.V[0xA] = 0xFF;
+
+    vm.skipIfEqual(0xA, 0xFF);
+    try expect(vm.PC == 0x204);
+
+    vm.skipIfEqual(0xA, 0xAB);
+    try expect(vm.PC == 0x206);
 }
