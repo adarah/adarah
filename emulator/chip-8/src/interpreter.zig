@@ -39,11 +39,11 @@ const Interpreter = struct {
         return Self{ .mem = mem };
     }
 
-    fn screen(self: *Self) *[256]u8 {
+    inline fn screen(self: *Self) *[256]u8 {
         return self.mem[mem_size - 256 ..];
     }
 
-    fn stackPeek(self: *Self) u16 {
+    inline fn stackPeek(self: *Self) u16 {
         // SP always points to next available position, so SP-1 contains the top of the stack
         return self.stack[self.SP - 1];
     }
@@ -70,8 +70,8 @@ const Interpreter = struct {
     }
 
     pub fn returnFromSubroutine(self: *Self) void {
-        self.PC = self.stackPeek();
         self.SP -= 1;
+        self.PC = self.stack[self.SP];
     }
 
     pub fn jump(self: *Self, address: u16) void {
@@ -138,6 +138,12 @@ const Interpreter = struct {
     pub fn sub(self: *Self, registerX: u4, registerY: u4) void {
         const underflow = @subWithOverflow(u8, self.V[registerX], self.V[registerY], &self.V[registerX]);
         self.V[0xF] = @boolToInt(!underflow);
+        self.PC += 2;
+    }
+
+    pub fn shiftRight(self: *Self, registerX: u4, registerY: u4) void {
+        self.V[registerX] = self.V[registerY] >> 1;
+        self.V[0xF] = self.V[registerY] & 1;
         self.PC += 2;
     }
 };
@@ -313,7 +319,7 @@ test "Interpreter bitwise XORs VX and VY" {
     try expect(vm.PC == 0x202);
 }
 
-test "Interpreter adds registers VX and VY" {
+test "Interpreter adds registers VX and VY and sets VF if overflow" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0xF0;
     vm.V[0xB] = 0x0A;
@@ -334,7 +340,7 @@ test "Interpreter adds registers VX and VY" {
     try expect(vm.PC == 0x206);
 }
 
-test "Interpreter subs registers VX and VY" {
+test "Interpreter subs registers VX and VY and sets VF if no underflow" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0x0F;
     vm.V[0xB] = 0x09;
@@ -353,4 +359,23 @@ test "Interpreter subs registers VX and VY" {
     try expect(vm.V[0xA] == 0xF4);
     try expect(vm.V[0xF] == 1);
     try expect(vm.PC == 0x206);
+}
+
+test "Interpreter right shifts VY into VX and sets VF to the LSB" {
+    var vm = Interpreter.init();
+    vm.V[0xA] = 0;
+    vm.V[0xB] = 0b1101;
+
+    vm.shiftRight(0xA, 0xB);
+    try expect(vm.V[0xA] == 0b0110);
+    try expect(vm.V[0xB] == 0b1101);
+    try expect(vm.V[0xF] == 1);
+    try expect(vm.PC == 0x202);
+
+    vm.V[0xB] = 0b0010;
+    vm.shiftRight(0xA, 0xB);
+    try expect(vm.V[0xA] == 0b0001);
+    try expect(vm.V[0xB] == 0b0010);
+    try expect(vm.V[0xF] == 0);
+    try expect(vm.PC == 0x204);
 }
