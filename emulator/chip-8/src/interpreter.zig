@@ -98,6 +98,11 @@ const Interpreter = struct {
         }
         self.PC += 2;
     }
+
+    pub fn store(self: *Self, register: u4, value: u8) void {
+        self.V[register] = value;
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -207,4 +212,16 @@ test "Interpreter skips next instruction if VX equals VY" {
 
     vm.skipIfRegistersEqual(0xA, 0xB);
     try expect(vm.PC == 0x206);
+}
+
+test "Interpreter stores value into register" {
+    var vm = Interpreter.init();
+
+    vm.store(0xA, 0xFF);
+    try expect(vm.V[0xA] == 0xFF);
+    try expect(vm.PC == 0x202);
+
+    vm.store(0xC, 0xCC);
+    try expect(vm.V[0xC] == 0xCC);
+    try expect(vm.PC == 0x204);
 }
