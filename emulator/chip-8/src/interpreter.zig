@@ -1,5 +1,6 @@
 const std = @import("std");
 const fmt = std.fmt;
+const rand = std.rand;
 const panic = std.debug.panic;
 
 const Interpreter = struct {
@@ -13,9 +14,11 @@ const Interpreter = struct {
     V: [16]u8 = std.mem.zeroes([16]u8),
     I: u16 = 0,
 
+    rand: rand.Random,
+
     const Self = @This();
 
-    pub fn init() Self {
+    pub fn init(seed: ?u64) Self {
         // Bytes 0x00 trough 0x1FF are reserved for the interpreter, so we store the fonts here.
         var mem = [0x50]u8{
             0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -36,7 +39,18 @@ const Interpreter = struct {
             0xF0, 0x80, 0xF0, 0x80, 0x80, // F
         } ++ std.mem.zeroes([4096 - 0x50]u8);
 
-        return Self{ .mem = mem };
+        var _seed: u64 = undefined;
+        if (seed) |sd| {
+            _seed = sd;
+        } else {
+            std.os.getrandom(std.mem.asBytes(&_seed)) catch |err| {
+                panic("could not gen random bytes to initialize rng: {}", .{err});
+            };
+        }
+        var prng = rand.DefaultPrng.init(_seed);
+        const random = prng.random();
+
+        return Self{ .mem = mem, .rand = random };
     }
 
     inline fn screen(self: *Self) *[256]u8 {
@@ -174,6 +188,11 @@ const Interpreter = struct {
     pub fn jumpWithOffset(self: *Self, address: u16) void {
         self.PC = self.V[0] + address;
     }
+
+    pub fn genRandom(self: *Self, register: u4, mask: u8) void {
+        self.V[register] = self.rand.int(u8) & mask;
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -183,7 +202,7 @@ const expectError = std.testing.expectError;
 const print = std.debug.print;
 
 test "Interpreter inits fonts" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     for (vm.mem) |byte, i| {
         if (i >= 0x50) {
             break;
@@ -193,12 +212,12 @@ test "Interpreter inits fonts" {
 }
 
 test "Interpreter makes syscall (0NNN)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     try expectError(error.NotImplemented, vm.syscall(0x300));
 }
 
 test "Interpreter clears screens (00E0)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     for (vm.screen()) |*b, i| {
         b.* = @intCast(u8, i);
     }
@@ -211,7 +230,7 @@ test "Interpreter clears screens (00E0)" {
 }
 
 test "Interpreter returns from subroutine (00EE)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
 
     vm.stack[0] = 0x500;
     vm.stack[1] = 0x800;
@@ -227,7 +246,7 @@ test "Interpreter returns from subroutine (00EE)" {
 }
 
 test "Interpreter jumps to address (1NNN)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
 
     vm.jump(0x300);
     try expect(vm.PC == 0x300);
@@ -237,7 +256,7 @@ test "Interpreter jumps to address (1NNN)" {
 }
 
 test "Interpreter calls subroutine (2NNN)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
 
     vm.callSubroutine(0x300);
     try expect(vm.PC == 0x300);
@@ -251,7 +270,7 @@ test "Interpreter calls subroutine (2NNN)" {
 }
 
 test "Interpreter skips next instruction if VX equals literal (3XNN)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0xA] = 0xFF;
 
     vm.skipIfEqualLiteral(0xA, 0xFF);
@@ -262,7 +281,7 @@ test "Interpreter skips next instruction if VX equals literal (3XNN)" {
 }
 
 test "Interpreter skips next instruction if VX not equals literal (4XNN)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0xA] = 0xFF;
 
     vm.skipIfNotEqualLiteral(0xA, 0xBC);
@@ -273,7 +292,7 @@ test "Interpreter skips next instruction if VX not equals literal (4XNN)" {
 }
 
 test "Interpreter skips next instruction if VX equals VY (5XY0)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0xA] = 0xFF;
     vm.V[0xB] = 0xFF;
 
@@ -287,7 +306,7 @@ test "Interpreter skips next instruction if VX equals VY (5XY0)" {
 }
 
 test "Interpreter stores literal into register (6XNN)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
 
     vm.storeLiteral(0xA, 0xFF);
     try expect(vm.V[0xA] == 0xFF);
@@ -299,7 +318,7 @@ test "Interpreter stores literal into register (6XNN)" {
 }
 
 test "Interpreter adds literal into register (7XNN)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
 
     vm.addLiteral(0xA, 0xFA);
     try expect(vm.V[0xA] == 0xFA);
@@ -312,7 +331,7 @@ test "Interpreter adds literal into register (7XNN)" {
 }
 
 test "Interpreter stores value from VY into VX (8XY0)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0xB] = 0xBB;
 
     vm.store(0xA, 0xB);
@@ -321,7 +340,7 @@ test "Interpreter stores value from VY into VX (8XY0)" {
 }
 
 test "Interpreter bitwise ORs VX and VY (8XY1)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0xA] = 0b0110;
     vm.V[0xB] = 0b1001;
     vm.bitwiseOr(0xA, 0xB);
@@ -330,7 +349,7 @@ test "Interpreter bitwise ORs VX and VY (8XY1)" {
 }
 
 test "Interpreter bitwise ANDs VX and VY (8XY2)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0xA] = 0b0110;
     vm.V[0xB] = 0b1001;
     vm.bitwiseAnd(0xA, 0xB);
@@ -339,7 +358,7 @@ test "Interpreter bitwise ANDs VX and VY (8XY2)" {
 }
 
 test "Interpreter bitwise XORs VX and VY (8XY3)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0xA] = 0b1010;
     vm.V[0xB] = 0b1001;
     vm.bitwiseXor(0xA, 0xB);
@@ -348,7 +367,7 @@ test "Interpreter bitwise XORs VX and VY (8XY3)" {
 }
 
 test "Interpreter adds registers VX and VY and sets VF if overflow (8XY4)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0xA] = 0xF0;
     vm.V[0xB] = 0x0A;
 
@@ -369,7 +388,7 @@ test "Interpreter adds registers VX and VY and sets VF if overflow (8XY4)" {
 }
 
 test "Interpreter subs registers VX and VY and sets VF if no underflow (8XY5)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0xA] = 0x0F;
     vm.V[0xB] = 0x09;
 
@@ -390,7 +409,7 @@ test "Interpreter subs registers VX and VY and sets VF if no underflow (8XY5)" {
 }
 
 test "Interpreter right shifts VY into VX and sets VF to the LSB (8XY6)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0xA] = 0;
     vm.V[0xB] = 0b1101;
 
@@ -409,7 +428,7 @@ test "Interpreter right shifts VY into VX and sets VF to the LSB (8XY6)" {
 }
 
 test "Interpreter sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0xA] = 0x09;
     vm.V[0xB] = 0x0A;
 
@@ -432,7 +451,7 @@ test "Interpreter sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
 }
 
 test "Interpreter left shifts VY into VX and sets VF to the MSB (8XYE)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0xA] = 0;
     vm.V[0xB] = 0b11011111;
 
@@ -451,7 +470,7 @@ test "Interpreter left shifts VY into VX and sets VF to the MSB (8XYE)" {
 }
 
 test "Interpreter skips if not equal register (9XY0)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0xA] = 0x5;
     vm.V[0xB] = 0xA;
 
@@ -464,7 +483,7 @@ test "Interpreter skips if not equal register (9XY0)" {
 }
 
 test "Interpreter stores memory address into I (ANNN)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
 
     vm.storeAddress(0x300);
     try expect(vm.I == 0x300);
@@ -472,9 +491,18 @@ test "Interpreter stores memory address into I (ANNN)" {
 }
 
 test "Interpreter jumps to NNN plus V0 (BNNN)" {
-    var vm = Interpreter.init();
+    var vm = Interpreter.init(null);
     vm.V[0] = 0x10;
 
     vm.jumpWithOffset(0x400);
     try expect(vm.PC == 0x410);
+}
+
+test "Interpreter sets VX to a random number with mask (CXNN)" {
+    // Wtih seed 0, the first number is 223 = 0b11011111
+    var vm = Interpreter.init(0);
+
+    vm.genRandom(0xA, 0b11110000);
+    try expect(vm.V[0xA] == 0b11010000);
+    try expect(vm.PC == 0x202);
 }
