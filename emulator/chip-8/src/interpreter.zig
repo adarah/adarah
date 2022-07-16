@@ -170,6 +170,10 @@ const Interpreter = struct {
         self.I = address;
         self.PC += 2;
     }
+
+    pub fn jumpWithOffset(self: *Self, address: u16) void {
+        self.PC = self.V[0] + address;
+    }
 };
 
 // Tests
@@ -465,4 +469,12 @@ test "Interpreter stores memory address into I (ANNN)" {
     vm.storeAddress(0x300);
     try expect(vm.I == 0x300);
     try expect(vm.PC == 0x202);
+}
+
+test "Interpreter jumps to NNN plus V0 (BNNN)" {
+    var vm = Interpreter.init();
+    vm.V[0] = 0x10;
+
+    vm.jumpWithOffset(0x400);
+    try expect(vm.PC == 0x410);
 }
