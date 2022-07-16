@@ -103,6 +103,11 @@ const Interpreter = struct {
         self.V[register] = value;
         self.PC += 2;
     }
+
+    pub fn add(self: *Self, register: u4, value: u8) void {
+        self.V[register] +%= value;
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -223,5 +228,18 @@ test "Interpreter stores value into register" {
 
     vm.store(0xC, 0xCC);
     try expect(vm.V[0xC] == 0xCC);
+    try expect(vm.PC == 0x204);
+}
+
+test "Interpreter adds value into register" {
+    var vm = Interpreter.init();
+
+    vm.add(0xA, 0xFA);
+    try expect(vm.V[0xA] == 0xFA);
+    try expect(vm.PC == 0x202);
+
+    // Overflows
+    vm.add(0xA, 0x06);
+    try expect(vm.V[0xA] == 0x00);
     try expect(vm.PC == 0x204);
 }
