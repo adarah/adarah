@@ -108,6 +108,11 @@ const Interpreter = struct {
         self.V[register] +%= value;
         self.PC += 2;
     }
+
+    pub fn storeRegister(self: *Self, registerX: u4, registerY: u4) void {
+        self.V[registerX] = self.V[registerY];
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -242,4 +247,12 @@ test "Interpreter adds value into register" {
     vm.add(0xA, 0x06);
     try expect(vm.V[0xA] == 0x00);
     try expect(vm.PC == 0x204);
+}
+
+test "Interpreter stores value from VY into VX" {
+    var vm = Interpreter.init();
+    vm.V[0xB] = 0xBB;
+
+    vm.storeRegister(0xA, 0xB);
+    try expect(vm.V[0xA] == 0xBB);
 }
