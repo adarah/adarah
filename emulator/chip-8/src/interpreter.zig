@@ -158,6 +158,13 @@ const Interpreter = struct {
         self.V[0xF] = @boolToInt(overflow);
         self.PC += 2;
     }
+
+    pub fn skipIfNotEqual(self: *Self, registerX: u4, registerY: u4) void {
+        if (self.V[registerX] != self.V[registerY]) {
+            self.PC += 2;
+        }
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -421,7 +428,6 @@ test "Interpreter left shifts VY into VX and sets VF to the MSB (8XYE)" {
     vm.V[0xB] = 0b11011111;
 
     vm.shiftLeft(0xA, 0xB);
-    print("\n{d}\n", .{vm.V[0xA]});
     try expect(vm.V[0xA] == 0b10111110);
     try expect(vm.V[0xB] == 0b11011111);
     try expect(vm.V[0xF] == 1);
@@ -433,4 +439,17 @@ test "Interpreter left shifts VY into VX and sets VF to the MSB (8XYE)" {
     try expect(vm.V[0xB] == 0b00101111);
     try expect(vm.V[0xF] == 0);
     try expect(vm.PC == 0x204);
+}
+
+test "Interpreter skips if not equal register (9XY0)" {
+    var vm = Interpreter.init();
+    vm.V[0xA] = 0x5;
+    vm.V[0xB] = 0xA;
+
+    vm.skipIfNotEqual(0xA, 0xB);
+    try expect(vm.PC == 0x204);
+
+    vm.V[0xB] = 0x5;
+    vm.skipIfNotEqual(0xA, 0xB);
+    try expect(vm.PC == 0x206);
 }
