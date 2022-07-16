@@ -79,6 +79,10 @@ const Interpreter = struct {
         self.PC = self.stackPeek();
         self.SP -= 1;
     }
+
+    pub fn jump(self: *Self, address: u16) void {
+        self.PC = address;
+    }
 };
 
 const expect = std.testing.expect;
@@ -125,4 +129,12 @@ test "Interpreter returns from subroutine" {
 
     try expect(vm.SP == 0);
     try expect(vm.PC == 0x500);
+}
+
+test "Interpreter jumps to address" {
+    var vm = Interpreter.init();
+
+    vm.PC = 0x200;
+    vm.jump(0x300);
+    try expect(vm.PC == 0x300);
 }
