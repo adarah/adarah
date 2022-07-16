@@ -78,38 +78,38 @@ const Interpreter = struct {
         self.PC = address;
     }
 
-    pub fn skipIfEqual(self: *Self, register: u4, value: u8) void {
+    pub fn skipIfEqualLiteral(self: *Self, register: u4, value: u8) void {
         if (self.V[register] == value) {
             self.PC += 2;
         }
         self.PC += 2;
     }
 
-    pub fn skipIfNotEqual(self: *Self, register: u4, value: u8) void {
+    pub fn skipIfNotEqualLiteral(self: *Self, register: u4, value: u8) void {
         if (self.V[register] != value) {
             self.PC += 2;
         }
         self.PC += 2;
     }
 
-    pub fn skipIfRegistersEqual(self: *Self, registerX: u4, registerY: u4) void {
+    pub fn skipIfEqual(self: *Self, registerX: u4, registerY: u4) void {
         if (self.V[registerX] == self.V[registerY]) {
             self.PC += 2;
         }
         self.PC += 2;
     }
 
-    pub fn store(self: *Self, register: u4, value: u8) void {
+    pub fn storeLiteral(self: *Self, register: u4, value: u8) void {
         self.V[register] = value;
         self.PC += 2;
     }
 
-    pub fn add(self: *Self, register: u4, value: u8) void {
+    pub fn addLiteral(self: *Self, register: u4, value: u8) void {
         self.V[register] +%= value;
         self.PC += 2;
     }
 
-    pub fn storeRegister(self: *Self, registerX: u4, registerY: u4) void {
+    pub fn store(self: *Self, registerX: u4, registerY: u4) void {
         self.V[registerX] = self.V[registerY];
         self.PC += 2;
     }
@@ -188,25 +188,25 @@ test "Interpreter calls subroutine" {
     try expect(vm.stackPeek() == 0x300);
 }
 
-test "Interpreter skips next instruction if VX equals NN" {
+test "Interpreter skips next instruction if VX equals literal" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0xFF;
 
-    vm.skipIfEqual(0xA, 0xFF);
+    vm.skipIfEqualLiteral(0xA, 0xFF);
     try expect(vm.PC == 0x204);
 
-    vm.skipIfEqual(0xA, 0xAB);
+    vm.skipIfEqualLiteral(0xA, 0xAB);
     try expect(vm.PC == 0x206);
 }
 
-test "Interpreter skips next instruction if VX not equals NN" {
+test "Interpreter skips next instruction if VX not equals literal" {
     var vm = Interpreter.init();
     vm.V[0xA] = 0xFF;
 
-    vm.skipIfNotEqual(0xA, 0xBC);
+    vm.skipIfNotEqualLiteral(0xA, 0xBC);
     try expect(vm.PC == 0x204);
 
-    vm.skipIfNotEqual(0xA, 0xFF);
+    vm.skipIfNotEqualLiteral(0xA, 0xFF);
     try expect(vm.PC == 0x206);
 }
 
@@ -215,23 +215,23 @@ test "Interpreter skips next instruction if VX equals VY" {
     vm.V[0xA] = 0xFF;
     vm.V[0xB] = 0xFF;
 
-    vm.skipIfRegistersEqual(0xA, 0xB);
+    vm.skipIfEqual(0xA, 0xB);
     try expect(vm.PC == 0x204);
 
     vm.V[0xB] = 0x21;
 
-    vm.skipIfRegistersEqual(0xA, 0xB);
+    vm.skipIfEqual(0xA, 0xB);
     try expect(vm.PC == 0x206);
 }
 
-test "Interpreter stores value into register" {
+test "Interpreter stores literal into register" {
     var vm = Interpreter.init();
 
-    vm.store(0xA, 0xFF);
+    vm.storeLiteral(0xA, 0xFF);
     try expect(vm.V[0xA] == 0xFF);
     try expect(vm.PC == 0x202);
 
-    vm.store(0xC, 0xCC);
+    vm.storeLiteral(0xC, 0xCC);
     try expect(vm.V[0xC] == 0xCC);
     try expect(vm.PC == 0x204);
 }
@@ -239,12 +239,12 @@ test "Interpreter stores value into register" {
 test "Interpreter adds value into register" {
     var vm = Interpreter.init();
 
-    vm.add(0xA, 0xFA);
+    vm.addLiteral(0xA, 0xFA);
     try expect(vm.V[0xA] == 0xFA);
     try expect(vm.PC == 0x202);
 
     // Overflows
-    vm.add(0xA, 0x06);
+    vm.addLiteral(0xA, 0x06);
     try expect(vm.V[0xA] == 0x00);
     try expect(vm.PC == 0x204);
 }
@@ -253,6 +253,6 @@ test "Interpreter stores value from VY into VX" {
     var vm = Interpreter.init();
     vm.V[0xB] = 0xBB;
 
-    vm.storeRegister(0xA, 0xB);
+    vm.store(0xA, 0xB);
     try expect(vm.V[0xA] == 0xBB);
 }
