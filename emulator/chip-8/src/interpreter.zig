@@ -165,6 +165,11 @@ const Interpreter = struct {
         }
         self.PC += 2;
     }
+
+    pub fn storeAddress(self: *Self, address: u16) void {
+        self.I = address;
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -452,4 +457,12 @@ test "Interpreter skips if not equal register (9XY0)" {
     vm.V[0xB] = 0x5;
     vm.skipIfNotEqual(0xA, 0xB);
     try expect(vm.PC == 0x206);
+}
+
+test "Interpreter stores memory address into I (ANNN)" {
+    var vm = Interpreter.init();
+
+    vm.storeAddress(0x300);
+    try expect(vm.I == 0x300);
+    try expect(vm.PC == 0x202);
 }
