@@ -128,6 +128,14 @@ const Interpreter = struct {
         self.V[registerX] ^= self.V[registerY];
         self.PC += 2;
     }
+
+    pub fn add(self: *Self, registerX: u4, registerY: u4) void {
+        const overflow = @addWithOverflow(u8, self.V[registerX], self.V[registerY], &self.V[registerX]);
+        if (overflow) {
+            self.V[0xF] = 1;
+        }
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -298,4 +306,20 @@ test "Interpreter bitwise XORs VX and VY" {
     vm.bitwiseXor(0xA, 0xB);
     try expect(vm.V[0xA] == 0b0011);
     try expect(vm.PC == 0x202);
+}
+
+test "Interpreter adds registers VX and VY" {
+    var vm = Interpreter.init();
+    vm.V[0xA] = 0xF0;
+    vm.V[0xB] = 0x0A;
+
+    vm.add(0xA, 0xB);
+    try expect(vm.V[0xA] == 0xFA);
+    try expect(vm.V[0xF] == 0);
+    try expect(vm.PC == 0x202);
+
+    vm.add(0xA, 0xB);
+    try expect(vm.V[0xA] == 0x04);
+    try expect(vm.V[0xF] == 1);
+    try expect(vm.PC == 0x204);
 }
