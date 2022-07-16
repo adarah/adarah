@@ -113,6 +113,11 @@ const Interpreter = struct {
         self.V[registerX] = self.V[registerY];
         self.PC += 2;
     }
+
+    pub fn bitwiseOr(self: *Self, registerX: u4, registerY: u4) void {
+        self.V[registerX] |= self.V[registerY];
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -236,7 +241,7 @@ test "Interpreter stores literal into register" {
     try expect(vm.PC == 0x204);
 }
 
-test "Interpreter adds value into register" {
+test "Interpreter adds literal into register" {
     var vm = Interpreter.init();
 
     vm.addLiteral(0xA, 0xFA);
@@ -255,4 +260,14 @@ test "Interpreter stores value from VY into VX" {
 
     vm.store(0xA, 0xB);
     try expect(vm.V[0xA] == 0xBB);
+    try expect(vm.PC == 0x202);
+}
+
+test "Interpreter bitiwse ORs VX and VY" {
+    var vm = Interpreter.init();
+    vm.V[0xA] = 0b0110;
+    vm.V[0xB] = 0b1001;
+    vm.bitwiseOr(0xA, 0xB);
+    try expect(vm.V[0xA] == 0b1111);
+    try expect(vm.PC == 0x202);
 }
