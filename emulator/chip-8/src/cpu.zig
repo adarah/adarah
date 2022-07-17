@@ -301,6 +301,11 @@ pub const Cpu = struct {
         self.sound_timer.set(v);
         self.PC += 2;
     }
+
+    pub fn addToI(self: *Self, register: u4) void {
+        self.I += self.V[register];
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -863,4 +868,14 @@ test "Cpu sets sound timer to value found in VX (FX18)" {
     cpu.setSoundTimer(0xA);
     try expect(cpu.sound_timer.value == 0);
     try expect(cpu.PC == 0x204);
+}
+
+test "Cpu adds the value from VX into I (FX1E)" {
+    var cpu = getTestCpu();
+    cpu.V[0xA] = 5;
+    cpu.I = 10;
+
+    cpu.addToI(0xA);
+    try expect(cpu.I == 15);
+    try expect(cpu.PC == 0x202);
 }
