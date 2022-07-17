@@ -6,6 +6,10 @@ pub const Timer = struct {
         return .{ .value = value };
     }
 
+    pub fn set(self: *Self, value: u8) void {
+        self.value = value;
+    }
+
     pub fn tick(self: *Self) void {
         // Saturates at 0
         self.value -|= 1;

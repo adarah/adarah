@@ -279,6 +279,12 @@ pub const Cpu = struct {
         self.V[register] = self.delay_timer.value;
         self.PC += 2;
     }
+
+    pub fn waitForKeypress(self: *Self, register: u4) void {
+        const key = await async self.keypad.waitForKeypress();
+        self.V[register] = key;
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -796,4 +802,25 @@ test "Cpu stores the value of the delay timer in VX (FX07)" {
     cpu.storeDelayTimer(0xA);
     try expect(cpu.V[0xA] == 10);
     try expect(cpu.PC == 0x202);
+}
+
+test "Cpu waits for keypress and stores result in VX (FX0A)" {
+    var cpu = getTestCpu();
+
+    var frame = async cpu.waitForKeypress(0xA);
+    cpu.keypad.pressKey(5);
+    cpu.keypad.releaseKey(5);
+    nosuspend await frame;
+    try expect(cpu.V[0xA] == 5);
+    try expect(cpu.PC == 0x202);
+
+    frame = async cpu.waitForKeypress(0xC);
+    cpu.keypad.pressKey(5);
+    cpu.keypad.pressKey(6);
+    cpu.keypad.pressKey(7);
+    cpu.keypad.releaseKey(6);
+    nosuspend await frame;
+
+    try expect(cpu.V[0xC] == 6);
+    try expect(cpu.PC == 0x204);
 }

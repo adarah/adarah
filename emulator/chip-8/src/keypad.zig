@@ -20,11 +20,19 @@ const allocator = gpa.allocator();
 pub const Keypad = struct {
     keys: StaticBitSet(16),
 
+    // Helpers for waitForKeypress
+    wait_frame: ?anyframe = null,
+    wait_res: u4 = 0,
+
     const Self = @This();
 
     pub fn init() Self {
         const bitSet = StaticBitSet(16).initEmpty();
         return .{ .keys = bitSet };
+    }
+
+    pub fn isPressed(self: *Self, key: u4) bool {
+        return self.keys.isSet(key);
     }
 
     pub fn pressKey(self: *Self, key: u4) void {
@@ -37,14 +45,21 @@ pub const Keypad = struct {
 
     pub fn releaseKey(self: *Self, key: u4) void {
         self.keys.unset(key);
-
-        // const msg = fmt.allocPrint(allocator, "released {d}", .{key}) catch "err";
-        // defer allocator.free(msg);
-        // wasm.consoleLog(msg.ptr, @intCast(c_uint, msg.len));
+        if (self.wait_frame) |frame| {
+            self.wait_frame = null;
+            self.wait_res = key;
+            resume frame;
+        }
     }
 
-    pub fn isPressed(self: *Self, key: u4) bool {
-        return self.keys.isSet(key);
+    // As seen in the reference, the interpreter should only be notified once the key is released.
+    // https://laurencescotford.com/chip-8-on-the-cosmac-vip-keyboard-input/
+    pub fn waitForKeypress(self: *Self) u4 {
+        self.wait_frame = @frame();
+        // Gets resumed by the `releaseKey` method
+        suspend {}
+
+        return self.wait_res;
     }
 };
 
