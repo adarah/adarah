@@ -6,10 +6,10 @@ pub fn build(b: *std.build.Builder) void {
     const mode = b.standardReleaseOptions();
 
     const lib = b.addSharedLibrary("chip-8", "src/main.zig", b.version(0, 0, 1));
+
     lib.setBuildMode(mode);
     lib.setTarget(.{ .cpu_arch = .wasm32, .os_tag = .freestanding });
     lib.install();
-
 
     const main_tests = b.addTest("src/main.zig");
     main_tests.setBuildMode(mode);
