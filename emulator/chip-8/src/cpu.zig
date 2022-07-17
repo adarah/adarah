@@ -290,6 +290,17 @@ pub const Cpu = struct {
         self.delay_timer.set(self.V[register]);
         self.PC += 2;
     }
+
+    pub fn setSoundTimer(self: *Self, register: u4) void {
+        var v = self.V[register];
+        // Setting the sound timer to values below 2 is supposed to be a NOOP
+        // https://github.com/mattmikolay/chip-8/wiki/CHIP%E2%80%908-Technical-Reference#timers
+        if (v < 2) {
+            v = 0;
+        }
+        self.sound_timer.set(v);
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -837,4 +848,19 @@ test "Cpu sets delay timer to value found in VX (FX15)" {
     cpu.setDelayTimer(0xA);
     try expect(cpu.delay_timer.value == 10);
     try expect(cpu.PC == 0x202);
+}
+
+test "Cpu sets sound timer to value found in VX (FX18)" {
+    var cpu = getTestCpu();
+
+    cpu.V[0xA] = 10;
+    cpu.setSoundTimer(0xA);
+    try expect(cpu.sound_timer.value == 10);
+    try expect(cpu.PC == 0x202);
+
+    // Setting the sound timer to values below 2 has no effect
+    cpu.V[0xA] = 1;
+    cpu.setSoundTimer(0xA);
+    try expect(cpu.sound_timer.value == 0);
+    try expect(cpu.PC == 0x204);
 }
