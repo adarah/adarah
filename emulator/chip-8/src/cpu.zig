@@ -1,11 +1,14 @@
 const std = @import("std");
 const Keypad = @import("./keypad.zig").Keypad;
+const Timer = @import("./timer.zig").Timer;
 const fmt = std.fmt;
 const rand = std.rand;
 const panic = std.debug.panic;
 
 const CpuOptions = struct {
     keypad: *Keypad,
+    sound_timer: *Timer,
+    delay_timer: *Timer,
     seed: u64,
 };
 
@@ -24,6 +27,8 @@ pub const Cpu = struct {
 
     // Helpers
     keypad: *Keypad,
+    sound_timer: *Timer,
+    delay_timer: *Timer,
     rand: rand.Random,
 
     const Self = @This();
@@ -52,7 +57,7 @@ pub const Cpu = struct {
         var prng = rand.DefaultPrng.init(options.seed);
         const random = prng.random();
 
-        return Self{ .mem = mem, .rand = random, .keypad = options.keypad };
+        return Self{ .mem = mem, .rand = random, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer };
     }
 
     inline fn screen(self: *Self) *[256]u8 {
@@ -277,9 +282,19 @@ const expect = std.testing.expect;
 const expectError = std.testing.expectError;
 const print = std.debug.print;
 
+var test_keypad: Keypad = undefined;
+var test_sound_timer: Timer = undefined;
+var test_delay_timer: Timer = undefined;
+
+fn getTestCpu() Cpu {
+    test_keypad = Keypad.init();
+    test_sound_timer = Timer.init(0);
+    test_delay_timer = Timer.init(0);
+    return Cpu.init(.{ .seed = 0, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer });
+}
+
 test "Cpu inits fonts" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    const cpu = getTestCpu();
     for (cpu.mem) |byte, i| {
         if (i >= 0x50) {
             break;
@@ -289,14 +304,12 @@ test "Cpu inits fonts" {
 }
 
 test "Cpu makes syscall (0NNN)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
     try expectError(error.NotImplemented, cpu.syscall(0x300));
 }
 
 test "Cpu clears screens (00E0)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
     for (cpu.screen()) |*b, i| {
         b.* = @intCast(u8, i);
     }
@@ -309,8 +322,7 @@ test "Cpu clears screens (00E0)" {
 }
 
 test "Cpu returns from subroutine (00EE)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.stack[0] = 0x500;
     cpu.stack[1] = 0x800;
@@ -326,8 +338,7 @@ test "Cpu returns from subroutine (00EE)" {
 }
 
 test "Cpu jumps to address (1NNN)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.jump(0x300);
     try expect(cpu.PC == 0x300);
@@ -337,8 +348,7 @@ test "Cpu jumps to address (1NNN)" {
 }
 
 test "Cpu calls subroutine (2NNN)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.callSubroutine(0x300);
     try expect(cpu.PC == 0x300);
@@ -352,8 +362,7 @@ test "Cpu calls subroutine (2NNN)" {
 }
 
 test "Cpu skips next instruction if VX equals literal (3XNN)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.V[0xA] = 0xFF;
 
@@ -365,8 +374,7 @@ test "Cpu skips next instruction if VX equals literal (3XNN)" {
 }
 
 test "Cpu skips next instruction if VX not equals literal (4XNN)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.V[0xA] = 0xFF;
 
@@ -378,8 +386,7 @@ test "Cpu skips next instruction if VX not equals literal (4XNN)" {
 }
 
 test "Cpu skips next instruction if VX equals VY (5XY0)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.V[0xA] = 0xFF;
     cpu.V[0xB] = 0xFF;
@@ -394,8 +401,7 @@ test "Cpu skips next instruction if VX equals VY (5XY0)" {
 }
 
 test "Cpu stores literal into register (6XNN)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.storeLiteral(0xA, 0xFF);
     try expect(cpu.V[0xA] == 0xFF);
@@ -407,8 +413,7 @@ test "Cpu stores literal into register (6XNN)" {
 }
 
 test "Cpu adds literal into register (7XNN)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.addLiteral(0xA, 0xFA);
     try expect(cpu.V[0xA] == 0xFA);
@@ -421,8 +426,7 @@ test "Cpu adds literal into register (7XNN)" {
 }
 
 test "Cpu stores value from VY into VX (8XY0)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.V[0xB] = 0xBB;
 
@@ -432,8 +436,7 @@ test "Cpu stores value from VY into VX (8XY0)" {
 }
 
 test "Cpu bitwise ORs VX and VY (8XY1)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
     cpu.V[0xA] = 0b0110;
     cpu.V[0xB] = 0b1001;
     cpu.bitwiseOr(0xA, 0xB);
@@ -442,8 +445,7 @@ test "Cpu bitwise ORs VX and VY (8XY1)" {
 }
 
 test "Cpu bitwise ANDs VX and VY (8XY2)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
     cpu.V[0xA] = 0b0110;
     cpu.V[0xB] = 0b1001;
     cpu.bitwiseAnd(0xA, 0xB);
@@ -452,8 +454,7 @@ test "Cpu bitwise ANDs VX and VY (8XY2)" {
 }
 
 test "Cpu bitwise XORs VX and VY (8XY3)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
     cpu.V[0xA] = 0b1010;
     cpu.V[0xB] = 0b1001;
     cpu.bitwiseXor(0xA, 0xB);
@@ -462,8 +463,7 @@ test "Cpu bitwise XORs VX and VY (8XY3)" {
 }
 
 test "Cpu adds registers VX and VY and sets VF if overflow (8XY4)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.V[0xA] = 0xF0;
     cpu.V[0xB] = 0x0A;
@@ -485,8 +485,7 @@ test "Cpu adds registers VX and VY and sets VF if overflow (8XY4)" {
 }
 
 test "Cpu subs registers VX and VY and sets VF if no underflow (8XY5)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.V[0xA] = 0x0F;
     cpu.V[0xB] = 0x09;
@@ -508,8 +507,7 @@ test "Cpu subs registers VX and VY and sets VF if no underflow (8XY5)" {
 }
 
 test "Cpu right shifts VY into VX and sets VF to the LSB (8XY6)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.V[0xA] = 0;
     cpu.V[0xB] = 0b1101;
@@ -529,8 +527,7 @@ test "Cpu right shifts VY into VX and sets VF to the LSB (8XY6)" {
 }
 
 test "Cpu sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.V[0xA] = 0x09;
     cpu.V[0xB] = 0x0A;
@@ -554,8 +551,7 @@ test "Cpu sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
 }
 
 test "Cpu left shifts VY into VX and sets VF to the MSB (8XYE)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.V[0xA] = 0;
     cpu.V[0xB] = 0b11011111;
@@ -575,8 +571,7 @@ test "Cpu left shifts VY into VX and sets VF to the MSB (8XYE)" {
 }
 
 test "Cpu skips if not equal register (9XY0)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.V[0xA] = 0x5;
     cpu.V[0xB] = 0xA;
@@ -590,8 +585,7 @@ test "Cpu skips if not equal register (9XY0)" {
 }
 
 test "Cpu stores memory address into I (ANNN)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.storeAddress(0x300);
     try expect(cpu.I == 0x300);
@@ -599,8 +593,7 @@ test "Cpu stores memory address into I (ANNN)" {
 }
 
 test "Cpu jumps to NNN plus V0 (BNNN)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.V[0] = 0x10;
 
@@ -609,9 +602,8 @@ test "Cpu jumps to NNN plus V0 (BNNN)" {
 }
 
 test "Cpu sets VX to a random number with mask (CXNN)" {
-    var keypad = Keypad.init();
     // Wtih seed 0, the first number is 223 = 0b11011111
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
 
     cpu.genRandom(0xA, 0b11110000);
     try expect(cpu.V[0xA] == 0b11010000);
@@ -619,8 +611,7 @@ test "Cpu sets VX to a random number with mask (CXNN)" {
 }
 
 test "Cpu draws sprite (DXYN)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    var cpu = getTestCpu();
     const s = cpu.screen();
 
     // Draw a 0 at (0, 0).
@@ -737,8 +728,7 @@ test "Cpu draws sprite (DXYN)" {
 }
 
 test "Cpu sets VF if drawing erases any pixels" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .keypad = &keypad, .seed = 0 });
+    var cpu = getTestCpu();
 
     cpu.I = 0;
     cpu.V[0xF] = 1;
@@ -767,10 +757,9 @@ test "splitMask helper splits masks correctly" {
 }
 
 test "Cpu skips next instruction if key in VX is pressed (EX9E)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .keypad = &keypad, .seed = 0 });
+    var cpu = getTestCpu();
 
-    keypad.pressKey(7);
+    test_keypad.pressKey(7);
 
     cpu.V[0xA] = 7;
     cpu.skipIfPressed(0xA);
@@ -782,10 +771,9 @@ test "Cpu skips next instruction if key in VX is pressed (EX9E)" {
 }
 
 test "Cpu skips next instruction f key in VX is not pressed (EXA1)" {
-    var keypad = Keypad.init();
-    var cpu = Cpu.init(.{ .keypad = &keypad, .seed = 0 });
+    var cpu = getTestCpu();
 
-    keypad.pressKey(7);
+    test_keypad.pressKey(7);
 
     cpu.V[0xA] = 7;
     cpu.skipIfNotPressed(0xA);
