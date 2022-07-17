@@ -87,3 +87,5 @@ tags
 
 !go.work
 *.wasm
+*.so.*
+*.o
