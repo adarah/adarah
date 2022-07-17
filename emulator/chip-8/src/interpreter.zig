@@ -249,6 +249,14 @@ pub const Cpu = struct {
         }
         self.PC += 2;
     }
+
+    pub fn skipIfNotPressed(self: *Self, register: u4) void {
+        const key = @intCast(u4, self.V[register]);
+        if (!self.keypad.isPressed(key)) {
+            self.PC += 2;
+        }
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -730,7 +738,7 @@ test "splitMask helper splits masks correctly" {
     try expect(res.right == 0b10100000);
 }
 
-test "Cpu skips next instruction if key in VX is pressed" {
+test "Cpu skips next instruction if key in VX is pressed (EX9E)" {
     var keypad = Keypad.init();
     var cpu = Cpu.init(.{ .keypad = &keypad, .seed = 0 });
 
@@ -742,5 +750,20 @@ test "Cpu skips next instruction if key in VX is pressed" {
 
     cpu.V[0xA] = 8;
     cpu.skipIfPressed(0xA);
+    try expect(cpu.PC == 0x206);
+}
+
+test "Cpu skips next instruction f key in VX is not pressed (EXA1)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .keypad = &keypad, .seed = 0 });
+
+    keypad.pressKey(7);
+
+    cpu.V[0xA] = 7;
+    cpu.skipIfNotPressed(0xA);
+    try expect(cpu.PC == 0x202);
+
+    cpu.V[0xA] = 8;
+    cpu.skipIfNotPressed(0xA);
     try expect(cpu.PC == 0x206);
 }
