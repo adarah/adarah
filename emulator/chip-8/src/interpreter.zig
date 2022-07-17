@@ -1,24 +1,34 @@
 const std = @import("std");
+const Keypad = @import("./keypad.zig").Keypad;
 const fmt = std.fmt;
 const rand = std.rand;
 const panic = std.debug.panic;
 
-pub const Interpreter = struct {
+const CpuOptions = struct {
+    keypad: *Keypad,
+    seed: u64,
+};
+
+pub const Cpu = struct {
     const mem_size = 4096;
+
+    // Memory
     mem: [mem_size]u8,
     stack: [16]u16 = std.mem.zeroes([16]u16),
-    PC: u16 = 0x200,
-    SP: u8 = 0,
 
     // Registers
     V: [16]u8 = std.mem.zeroes([16]u8),
     I: u16 = 0,
+    PC: u16 = 0x200,
+    SP: u8 = 0,
 
+    // Helpers
+    keypad: *Keypad,
     rand: rand.Random,
 
     const Self = @This();
 
-    pub fn init(seed: u64) Self {
+    pub fn init(options: CpuOptions) Self {
         // Bytes 0x00 trough 0x1FF are reserved for the interpreter, so we store the fonts here.
         var mem = [0x50]u8{
             0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -39,10 +49,10 @@ pub const Interpreter = struct {
             0xF0, 0x80, 0xF0, 0x80, 0x80, // F
         } ++ std.mem.zeroes([4096 - 0x50]u8);
 
-        var prng = rand.DefaultPrng.init(seed);
+        var prng = rand.DefaultPrng.init(options.seed);
         const random = prng.random();
 
-        return Self{ .mem = mem, .rand = random };
+        return Self{ .mem = mem, .rand = random, .keypad = options.keypad };
     }
 
     inline fn screen(self: *Self) *[256]u8 {
@@ -215,7 +225,7 @@ pub const Interpreter = struct {
         while (i < height) : (i += 1) {
             const offset = 8 * i;
             const sprite_data = self.mem[self.I + i];
-            const masks = Interpreter.splitMask(sprite_data, bits_first);
+            const masks = Cpu.splitMask(sprite_data, bits_first);
             _screen[@mod(y + x_first + offset, 256)] ^= masks.left;
             _screen[@mod(y + x_second + offset, 256)] ^= masks.right;
         }
@@ -231,6 +241,14 @@ pub const Interpreter = struct {
         const right = @shlExact(mask & lsb_mask, @intCast(u3, 8 - @as(u8, N)));
         return .{ .left = left, .right = right };
     }
+
+    pub fn skipIfPressed(self: *Self, register: u4) void {
+        const key = @intCast(u4, self.V[register]);
+        if (self.keypad.isPressed(key)) {
+            self.PC += 2;
+        }
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -239,9 +257,10 @@ const expect = std.testing.expect;
 const expectError = std.testing.expectError;
 const print = std.debug.print;
 
-test "Interpreter inits fonts" {
-    var vm = Interpreter.init(0);
-    for (vm.mem) |byte, i| {
+test "Cpu inits fonts" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    for (cpu.mem) |byte, i| {
         if (i >= 0x50) {
             break;
         }
@@ -249,346 +268,381 @@ test "Interpreter inits fonts" {
     }
 }
 
-test "Interpreter makes syscall (0NNN)" {
-    var vm = Interpreter.init(0);
-    try expectError(error.NotImplemented, vm.syscall(0x300));
+test "Cpu makes syscall (0NNN)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    try expectError(error.NotImplemented, cpu.syscall(0x300));
 }
 
-test "Interpreter clears screens (00E0)" {
-    var vm = Interpreter.init(0);
-    for (vm.screen()) |*b, i| {
+test "Cpu clears screens (00E0)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    for (cpu.screen()) |*b, i| {
         b.* = @intCast(u8, i);
     }
 
-    vm.clearScreen();
-    for (vm.screen()) |b| {
+    cpu.clearScreen();
+    for (cpu.screen()) |b| {
         try expect(b == 0);
     }
-    try expect(vm.PC == 0x202);
+    try expect(cpu.PC == 0x202);
 }
 
-test "Interpreter returns from subroutine (00EE)" {
-    var vm = Interpreter.init(0);
+test "Cpu returns from subroutine (00EE)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.stack[0] = 0x500;
-    vm.stack[1] = 0x800;
-    vm.SP = 2;
+    cpu.stack[0] = 0x500;
+    cpu.stack[1] = 0x800;
+    cpu.SP = 2;
 
-    vm.returnFromSubroutine();
-    try expect(vm.SP == 1);
-    try expect(vm.PC == 0x800);
+    cpu.returnFromSubroutine();
+    try expect(cpu.SP == 1);
+    try expect(cpu.PC == 0x800);
 
-    vm.returnFromSubroutine();
-    try expect(vm.SP == 0);
-    try expect(vm.PC == 0x500);
+    cpu.returnFromSubroutine();
+    try expect(cpu.SP == 0);
+    try expect(cpu.PC == 0x500);
 }
 
-test "Interpreter jumps to address (1NNN)" {
-    var vm = Interpreter.init(0);
+test "Cpu jumps to address (1NNN)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.jump(0x300);
-    try expect(vm.PC == 0x300);
+    cpu.jump(0x300);
+    try expect(cpu.PC == 0x300);
 
-    vm.jump(0x500);
-    try expect(vm.PC == 0x500);
+    cpu.jump(0x500);
+    try expect(cpu.PC == 0x500);
 }
 
-test "Interpreter calls subroutine (2NNN)" {
-    var vm = Interpreter.init(0);
+test "Cpu calls subroutine (2NNN)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.callSubroutine(0x300);
-    try expect(vm.PC == 0x300);
-    try expect(vm.SP == 1);
-    try expect(vm.stackPeek() == 0x200);
+    cpu.callSubroutine(0x300);
+    try expect(cpu.PC == 0x300);
+    try expect(cpu.SP == 1);
+    try expect(cpu.stackPeek() == 0x200);
 
-    vm.callSubroutine(0x500);
-    try expect(vm.PC == 0x500);
-    try expect(vm.SP == 2);
-    try expect(vm.stackPeek() == 0x300);
+    cpu.callSubroutine(0x500);
+    try expect(cpu.PC == 0x500);
+    try expect(cpu.SP == 2);
+    try expect(cpu.stackPeek() == 0x300);
 }
 
-test "Interpreter skips next instruction if VX equals literal (3XNN)" {
-    var vm = Interpreter.init(0);
-    vm.V[0xA] = 0xFF;
+test "Cpu skips next instruction if VX equals literal (3XNN)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.skipIfEqualLiteral(0xA, 0xFF);
-    try expect(vm.PC == 0x204);
+    cpu.V[0xA] = 0xFF;
 
-    vm.skipIfEqualLiteral(0xA, 0xAB);
-    try expect(vm.PC == 0x206);
+    cpu.skipIfEqualLiteral(0xA, 0xFF);
+    try expect(cpu.PC == 0x204);
+
+    cpu.skipIfEqualLiteral(0xA, 0xAB);
+    try expect(cpu.PC == 0x206);
 }
 
-test "Interpreter skips next instruction if VX not equals literal (4XNN)" {
-    var vm = Interpreter.init(0);
-    vm.V[0xA] = 0xFF;
+test "Cpu skips next instruction if VX not equals literal (4XNN)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.skipIfNotEqualLiteral(0xA, 0xBC);
-    try expect(vm.PC == 0x204);
+    cpu.V[0xA] = 0xFF;
 
-    vm.skipIfNotEqualLiteral(0xA, 0xFF);
-    try expect(vm.PC == 0x206);
+    cpu.skipIfNotEqualLiteral(0xA, 0xBC);
+    try expect(cpu.PC == 0x204);
+
+    cpu.skipIfNotEqualLiteral(0xA, 0xFF);
+    try expect(cpu.PC == 0x206);
 }
 
-test "Interpreter skips next instruction if VX equals VY (5XY0)" {
-    var vm = Interpreter.init(0);
-    vm.V[0xA] = 0xFF;
-    vm.V[0xB] = 0xFF;
+test "Cpu skips next instruction if VX equals VY (5XY0)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.skipIfEqual(0xA, 0xB);
-    try expect(vm.PC == 0x204);
+    cpu.V[0xA] = 0xFF;
+    cpu.V[0xB] = 0xFF;
 
-    vm.V[0xB] = 0x21;
+    cpu.skipIfEqual(0xA, 0xB);
+    try expect(cpu.PC == 0x204);
 
-    vm.skipIfEqual(0xA, 0xB);
-    try expect(vm.PC == 0x206);
+    cpu.V[0xB] = 0x21;
+
+    cpu.skipIfEqual(0xA, 0xB);
+    try expect(cpu.PC == 0x206);
 }
 
-test "Interpreter stores literal into register (6XNN)" {
-    var vm = Interpreter.init(0);
+test "Cpu stores literal into register (6XNN)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.storeLiteral(0xA, 0xFF);
-    try expect(vm.V[0xA] == 0xFF);
-    try expect(vm.PC == 0x202);
+    cpu.storeLiteral(0xA, 0xFF);
+    try expect(cpu.V[0xA] == 0xFF);
+    try expect(cpu.PC == 0x202);
 
-    vm.storeLiteral(0xC, 0xCC);
-    try expect(vm.V[0xC] == 0xCC);
-    try expect(vm.PC == 0x204);
+    cpu.storeLiteral(0xC, 0xCC);
+    try expect(cpu.V[0xC] == 0xCC);
+    try expect(cpu.PC == 0x204);
 }
 
-test "Interpreter adds literal into register (7XNN)" {
-    var vm = Interpreter.init(0);
+test "Cpu adds literal into register (7XNN)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.addLiteral(0xA, 0xFA);
-    try expect(vm.V[0xA] == 0xFA);
-    try expect(vm.PC == 0x202);
+    cpu.addLiteral(0xA, 0xFA);
+    try expect(cpu.V[0xA] == 0xFA);
+    try expect(cpu.PC == 0x202);
 
     // Overflows
-    vm.addLiteral(0xA, 0x06);
-    try expect(vm.V[0xA] == 0x00);
-    try expect(vm.PC == 0x204);
+    cpu.addLiteral(0xA, 0x06);
+    try expect(cpu.V[0xA] == 0x00);
+    try expect(cpu.PC == 0x204);
 }
 
-test "Interpreter stores value from VY into VX (8XY0)" {
-    var vm = Interpreter.init(0);
-    vm.V[0xB] = 0xBB;
+test "Cpu stores value from VY into VX (8XY0)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.store(0xA, 0xB);
-    try expect(vm.V[0xA] == 0xBB);
-    try expect(vm.PC == 0x202);
+    cpu.V[0xB] = 0xBB;
+
+    cpu.store(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0xBB);
+    try expect(cpu.PC == 0x202);
 }
 
-test "Interpreter bitwise ORs VX and VY (8XY1)" {
-    var vm = Interpreter.init(0);
-    vm.V[0xA] = 0b0110;
-    vm.V[0xB] = 0b1001;
-    vm.bitwiseOr(0xA, 0xB);
-    try expect(vm.V[0xA] == 0b1111);
-    try expect(vm.PC == 0x202);
+test "Cpu bitwise ORs VX and VY (8XY1)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    cpu.V[0xA] = 0b0110;
+    cpu.V[0xB] = 0b1001;
+    cpu.bitwiseOr(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0b1111);
+    try expect(cpu.PC == 0x202);
 }
 
-test "Interpreter bitwise ANDs VX and VY (8XY2)" {
-    var vm = Interpreter.init(0);
-    vm.V[0xA] = 0b0110;
-    vm.V[0xB] = 0b1001;
-    vm.bitwiseAnd(0xA, 0xB);
-    try expect(vm.V[0xA] == 0b0000);
-    try expect(vm.PC == 0x202);
+test "Cpu bitwise ANDs VX and VY (8XY2)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    cpu.V[0xA] = 0b0110;
+    cpu.V[0xB] = 0b1001;
+    cpu.bitwiseAnd(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0b0000);
+    try expect(cpu.PC == 0x202);
 }
 
-test "Interpreter bitwise XORs VX and VY (8XY3)" {
-    var vm = Interpreter.init(0);
-    vm.V[0xA] = 0b1010;
-    vm.V[0xB] = 0b1001;
-    vm.bitwiseXor(0xA, 0xB);
-    try expect(vm.V[0xA] == 0b0011);
-    try expect(vm.PC == 0x202);
+test "Cpu bitwise XORs VX and VY (8XY3)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    cpu.V[0xA] = 0b1010;
+    cpu.V[0xB] = 0b1001;
+    cpu.bitwiseXor(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0b0011);
+    try expect(cpu.PC == 0x202);
 }
 
-test "Interpreter adds registers VX and VY and sets VF if overflow (8XY4)" {
-    var vm = Interpreter.init(0);
-    vm.V[0xA] = 0xF0;
-    vm.V[0xB] = 0x0A;
+test "Cpu adds registers VX and VY and sets VF if overflow (8XY4)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.add(0xA, 0xB);
-    try expect(vm.V[0xA] == 0xFA);
-    try expect(vm.V[0xF] == 0);
-    try expect(vm.PC == 0x202);
+    cpu.V[0xA] = 0xF0;
+    cpu.V[0xB] = 0x0A;
 
-    vm.add(0xA, 0xB);
-    try expect(vm.V[0xA] == 0x04);
-    try expect(vm.V[0xF] == 1);
-    try expect(vm.PC == 0x204);
+    cpu.add(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0xFA);
+    try expect(cpu.V[0xF] == 0);
+    try expect(cpu.PC == 0x202);
 
-    vm.add(0xA, 0xB);
-    try expect(vm.V[0xA] == 0xE);
-    try expect(vm.V[0xF] == 0);
-    try expect(vm.PC == 0x206);
+    cpu.add(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0x04);
+    try expect(cpu.V[0xF] == 1);
+    try expect(cpu.PC == 0x204);
+
+    cpu.add(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0xE);
+    try expect(cpu.V[0xF] == 0);
+    try expect(cpu.PC == 0x206);
 }
 
-test "Interpreter subs registers VX and VY and sets VF if no underflow (8XY5)" {
-    var vm = Interpreter.init(0);
-    vm.V[0xA] = 0x0F;
-    vm.V[0xB] = 0x09;
+test "Cpu subs registers VX and VY and sets VF if no underflow (8XY5)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.sub(0xA, 0xB);
-    try expect(vm.V[0xA] == 0x06);
-    try expect(vm.V[0xF] == 1);
-    try expect(vm.PC == 0x202);
+    cpu.V[0xA] = 0x0F;
+    cpu.V[0xB] = 0x09;
 
-    vm.sub(0xA, 0xB);
-    try expect(vm.V[0xA] == 0xFD);
-    try expect(vm.V[0xF] == 0);
-    try expect(vm.PC == 0x204);
+    cpu.sub(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0x06);
+    try expect(cpu.V[0xF] == 1);
+    try expect(cpu.PC == 0x202);
 
-    vm.sub(0xA, 0xB);
-    try expect(vm.V[0xA] == 0xF4);
-    try expect(vm.V[0xF] == 1);
-    try expect(vm.PC == 0x206);
+    cpu.sub(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0xFD);
+    try expect(cpu.V[0xF] == 0);
+    try expect(cpu.PC == 0x204);
+
+    cpu.sub(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0xF4);
+    try expect(cpu.V[0xF] == 1);
+    try expect(cpu.PC == 0x206);
 }
 
-test "Interpreter right shifts VY into VX and sets VF to the LSB (8XY6)" {
-    var vm = Interpreter.init(0);
-    vm.V[0xA] = 0;
-    vm.V[0xB] = 0b1101;
+test "Cpu right shifts VY into VX and sets VF to the LSB (8XY6)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.shiftRight(0xA, 0xB);
-    try expect(vm.V[0xA] == 0b0110);
-    try expect(vm.V[0xB] == 0b1101);
-    try expect(vm.V[0xF] == 1);
-    try expect(vm.PC == 0x202);
+    cpu.V[0xA] = 0;
+    cpu.V[0xB] = 0b1101;
 
-    vm.V[0xB] = 0b0010;
-    vm.shiftRight(0xA, 0xB);
-    try expect(vm.V[0xA] == 0b0001);
-    try expect(vm.V[0xB] == 0b0010);
-    try expect(vm.V[0xF] == 0);
-    try expect(vm.PC == 0x204);
+    cpu.shiftRight(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0b0110);
+    try expect(cpu.V[0xB] == 0b1101);
+    try expect(cpu.V[0xF] == 1);
+    try expect(cpu.PC == 0x202);
+
+    cpu.V[0xB] = 0b0010;
+    cpu.shiftRight(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0b0001);
+    try expect(cpu.V[0xB] == 0b0010);
+    try expect(cpu.V[0xF] == 0);
+    try expect(cpu.PC == 0x204);
 }
 
-test "Interpreter sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
-    var vm = Interpreter.init(0);
-    vm.V[0xA] = 0x09;
-    vm.V[0xB] = 0x0A;
+test "Cpu sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.subStore(0xA, 0xB);
-    try expect(vm.V[0xA] == 0x01);
-    try expect(vm.V[0xF] == 1);
-    try expect(vm.PC == 0x202);
+    cpu.V[0xA] = 0x09;
+    cpu.V[0xB] = 0x0A;
 
-    vm.V[0xA] = 0xC;
-    vm.subStore(0xA, 0xB);
-    try expect(vm.V[0xA] == 0xFE);
-    try expect(vm.V[0xF] == 0);
-    try expect(vm.PC == 0x204);
+    cpu.subStore(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0x01);
+    try expect(cpu.V[0xF] == 1);
+    try expect(cpu.PC == 0x202);
 
-    vm.V[0xA] = 0x3;
-    vm.subStore(0xA, 0xB);
-    try expect(vm.V[0xA] == 0x07);
-    try expect(vm.V[0xF] == 1);
-    try expect(vm.PC == 0x206);
+    cpu.V[0xA] = 0xC;
+    cpu.subStore(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0xFE);
+    try expect(cpu.V[0xF] == 0);
+    try expect(cpu.PC == 0x204);
+
+    cpu.V[0xA] = 0x3;
+    cpu.subStore(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0x07);
+    try expect(cpu.V[0xF] == 1);
+    try expect(cpu.PC == 0x206);
 }
 
-test "Interpreter left shifts VY into VX and sets VF to the MSB (8XYE)" {
-    var vm = Interpreter.init(0);
-    vm.V[0xA] = 0;
-    vm.V[0xB] = 0b11011111;
+test "Cpu left shifts VY into VX and sets VF to the MSB (8XYE)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.shiftLeft(0xA, 0xB);
-    try expect(vm.V[0xA] == 0b10111110);
-    try expect(vm.V[0xB] == 0b11011111);
-    try expect(vm.V[0xF] == 1);
-    try expect(vm.PC == 0x202);
+    cpu.V[0xA] = 0;
+    cpu.V[0xB] = 0b11011111;
 
-    vm.V[0xB] = 0b00101111;
-    vm.shiftLeft(0xA, 0xB);
-    try expect(vm.V[0xA] == 0b01011110);
-    try expect(vm.V[0xB] == 0b00101111);
-    try expect(vm.V[0xF] == 0);
-    try expect(vm.PC == 0x204);
+    cpu.shiftLeft(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0b10111110);
+    try expect(cpu.V[0xB] == 0b11011111);
+    try expect(cpu.V[0xF] == 1);
+    try expect(cpu.PC == 0x202);
+
+    cpu.V[0xB] = 0b00101111;
+    cpu.shiftLeft(0xA, 0xB);
+    try expect(cpu.V[0xA] == 0b01011110);
+    try expect(cpu.V[0xB] == 0b00101111);
+    try expect(cpu.V[0xF] == 0);
+    try expect(cpu.PC == 0x204);
 }
 
-test "Interpreter skips if not equal register (9XY0)" {
-    var vm = Interpreter.init(0);
-    vm.V[0xA] = 0x5;
-    vm.V[0xB] = 0xA;
+test "Cpu skips if not equal register (9XY0)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.skipIfNotEqual(0xA, 0xB);
-    try expect(vm.PC == 0x204);
+    cpu.V[0xA] = 0x5;
+    cpu.V[0xB] = 0xA;
 
-    vm.V[0xB] = 0x5;
-    vm.skipIfNotEqual(0xA, 0xB);
-    try expect(vm.PC == 0x206);
+    cpu.skipIfNotEqual(0xA, 0xB);
+    try expect(cpu.PC == 0x204);
+
+    cpu.V[0xB] = 0x5;
+    cpu.skipIfNotEqual(0xA, 0xB);
+    try expect(cpu.PC == 0x206);
 }
 
-test "Interpreter stores memory address into I (ANNN)" {
-    var vm = Interpreter.init(0);
+test "Cpu stores memory address into I (ANNN)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.storeAddress(0x300);
-    try expect(vm.I == 0x300);
-    try expect(vm.PC == 0x202);
+    cpu.storeAddress(0x300);
+    try expect(cpu.I == 0x300);
+    try expect(cpu.PC == 0x202);
 }
 
-test "Interpreter jumps to NNN plus V0 (BNNN)" {
-    var vm = Interpreter.init(0);
-    vm.V[0] = 0x10;
+test "Cpu jumps to NNN plus V0 (BNNN)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.jumpWithOffset(0x400);
-    try expect(vm.PC == 0x410);
+    cpu.V[0] = 0x10;
+
+    cpu.jumpWithOffset(0x400);
+    try expect(cpu.PC == 0x410);
 }
 
-test "Interpreter sets VX to a random number with mask (CXNN)" {
+test "Cpu sets VX to a random number with mask (CXNN)" {
+    var keypad = Keypad.init();
     // Wtih seed 0, the first number is 223 = 0b11011111
-    var vm = Interpreter.init(0);
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
 
-    vm.genRandom(0xA, 0b11110000);
-    try expect(vm.V[0xA] == 0b11010000);
-    try expect(vm.PC == 0x202);
+    cpu.genRandom(0xA, 0b11110000);
+    try expect(cpu.V[0xA] == 0b11010000);
+    try expect(cpu.PC == 0x202);
 }
 
-test "Interpreter draws sprite (DXYN)" {
-    var vm = Interpreter.init(0);
-    const s = vm.screen();
+test "Cpu draws sprite (DXYN)" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .seed = 0, .keypad = &keypad });
+    const s = cpu.screen();
 
     // Draw a 0 at (0, 0).
     // No offset, simplest case.
-    vm.I = 0;
-    vm.draw(0, 0, 5);
+    cpu.I = 0;
+    cpu.draw(0, 0, 5);
 
     // Draw a 1 at (16, 0).
     // Has X offset at multiple of 8.
-    vm.I = 5;
-    vm.draw(16, 0, 5);
+    cpu.I = 5;
+    cpu.draw(16, 0, 5);
 
     // Draw a 2 at (0, 16).
     // Has Y offset at multiple of 8.
-    vm.I = 10;
-    vm.draw(0, 16, 5);
+    cpu.I = 10;
+    cpu.draw(0, 16, 5);
 
     // Draw a 3 at (16, 16).
     // Has X and Y offset at multiples of 8.
-    vm.I = 15;
-    vm.draw(16, 16, 5);
+    cpu.I = 15;
+    cpu.draw(16, 16, 5);
 
     // Draw a 5 at (26, 0).
     // Has X and Y offsets, but X is not a multiple of 8
-    vm.I = 25;
-    vm.draw(25, 0, 5);
+    cpu.I = 25;
+    cpu.draw(25, 0, 5);
 
     // Draw a 9 at (31, 16).
     // Has X and Y offsets, neither of which are multiples of X
     // The drawing spans 2 separate bytes
-    vm.I = 45;
-    vm.draw(30, 16, 5);
+    cpu.I = 45;
+    cpu.draw(30, 16, 5);
 
     // Draw a 7 at (63, 8).
     // This drawing wraps around the X axis.
-    vm.I = 35;
-    vm.draw(62, 8, 5);
+    cpu.I = 35;
+    cpu.draw(62, 8, 5);
 
     // Draw a 8 at (8, 30).
     // This drawing wraps around the Y axis.
-    vm.I = 40;
-    vm.draw(8, 30, 5);
+    cpu.I = 40;
+    cpu.draw(8, 30, 5);
 
     // var i: usize = 0;
     // while (i < 32) : (i += 1) {
@@ -663,15 +717,30 @@ test "Interpreter draws sprite (DXYN)" {
 }
 
 test "splitMask helper splits masks correctly" {
-    var res = Interpreter.splitMask(0b10101111, 4);
+    var res = Cpu.splitMask(0b10101111, 4);
     try expect(res.left == 0b1010);
     try expect(res.right == 0b11110000);
 
-    res = Interpreter.splitMask(0b01001101, 2);
+    res = Cpu.splitMask(0b01001101, 2);
     try expect(res.left == 0b00010011);
     try expect(res.right == 0b01000000);
 
-    res = Interpreter.splitMask(0b11001101, 3);
+    res = Cpu.splitMask(0b11001101, 3);
     try expect(res.left == 0b00011001);
     try expect(res.right == 0b10100000);
+}
+
+test "Cpu skips next instruction if key in VX is pressed" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .keypad = &keypad, .seed = 0 });
+
+    keypad.pressKey(7);
+
+    cpu.V[0xA] = 7;
+    cpu.skipIfPressed(0xA);
+    try expect(cpu.PC == 0x204);
+
+    cpu.V[0xA] = 8;
+    cpu.skipIfPressed(0xA);
+    try expect(cpu.PC == 0x206);
 }
