@@ -306,6 +306,11 @@ pub const Cpu = struct {
         self.I += self.V[register];
         self.PC += 2;
     }
+
+    pub fn setSprite(self: *Self, register: u8) void {
+        self.I = self.V[register] * 5;
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -877,5 +882,14 @@ test "Cpu adds the value from VX into I (FX1E)" {
 
     cpu.addToI(0xA);
     try expect(cpu.I == 15);
+    try expect(cpu.PC == 0x202);
+}
+
+test "Cpu sets I to sprite found in VX (FX29)" {
+    var cpu = getTestCpu();
+
+    cpu.V[0xA] = 5;
+    cpu.setSprite(0xA);
+    try expect(cpu.I == 25);
     try expect(cpu.PC == 0x202);
 }
