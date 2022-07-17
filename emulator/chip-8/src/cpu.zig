@@ -274,6 +274,11 @@ pub const Cpu = struct {
         }
         self.PC += 2;
     }
+
+    pub fn storeDelayTimer(self: *Self, register: u4) void {
+        self.V[register] = self.delay_timer.value;
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -782,4 +787,13 @@ test "Cpu skips next instruction f key in VX is not pressed (EXA1)" {
     cpu.V[0xA] = 8;
     cpu.skipIfNotPressed(0xA);
     try expect(cpu.PC == 0x206);
+}
+
+test "Cpu stores the value of the delay timer in VX (FX07)" {
+    var cpu = getTestCpu();
+
+    cpu.delay_timer.value = 10;
+    cpu.storeDelayTimer(0xA);
+    try expect(cpu.V[0xA] == 10);
+    try expect(cpu.PC == 0x202);
 }
