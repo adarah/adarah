@@ -193,6 +193,48 @@ const Interpreter = struct {
         self.V[register] = self.rand.int(u8) & mask;
         self.PC += 2;
     }
+
+    // Pixel addresses might not perfectly align with our bytes (happens on 87.5% of cases)
+    // When painting pixels, we should fetch the current and the "next" byte.
+    // The "next" byte might not be the immediatelly following byte in case we are near one of the edges of the screen.
+    // In such situations, we need to wrap around.
+    // Once we obtain both bytes, we split the mask in 2 parts and apply it to both of them.
+    // Pseudocode:
+    // Given the top-left "screen address" of a "pixel row", find the 2 bytes that will be affected
+    // Split the mask in two parts, and apply them to both bytes via XOR
+    // If any bit is ever unset, we set the VF register.
+    pub fn draw(self: *Self, X: u6, Y: u5, height: u5) void {
+        const y = @intCast(u8, @mod(@as(usize, Y) * 8, 256)); // 31*8=248 at most
+        const _x: usize = X;
+        // In most situations, drawing something on the screen will require applying a mask to two differente bytes
+        // Looking at X + 8 (with modulo) guarantees that we look at the next byte in the row (wrapped if needed).
+        // But we don't want the next byte if X is exactly divisible by 8 since the mask is supposed to only affect one byte,
+        // in such situations, so we use X + 7 instead.
+        // This guarantees that we grab the next byte if and only if X is not divisible by 8.
+        const x_first = @mod(_x, 64) / 8; // 7 at most
+        const x_second = @mod(_x + 7, 64) / 8; // 7 at most
+        const bits_first = @intCast(u3, @mod(@mod(_x, 64), 8)); // 0-7
+        const _screen = self.screen();
+        var i: usize = 0;
+        while (i < height) : (i += 1) {
+            const offset = 8 * i;
+            const sprite_data = self.mem[self.I + i];
+            const masks = Interpreter.splitMask(sprite_data, bits_first);
+            _screen[@mod(y + x_first + offset, 256)] ^= masks.left;
+            _screen[@mod(y + x_second + offset, 256)] ^= masks.right;
+        }
+    }
+
+    // splitMask splits a mask in two, leaving 8-N bits in the left mask, and N bits in the right mask
+    inline fn splitMask(mask: u8, N: u3) struct { left: u8, right: u8 } {
+        if (N == 0) {
+            return .{ .left = mask, .right = 0 };
+        }
+        const lsb_mask = (@as(u8, 1) << N) - 1;
+        const left = mask >> N;
+        const right = @shlExact(mask & lsb_mask, @intCast(u3, 8 - @as(u8, N)));
+        return .{ .left = left, .right = right };
+    }
 };
 
 // Tests
@@ -505,4 +547,135 @@ test "Interpreter sets VX to a random number with mask (CXNN)" {
     vm.genRandom(0xA, 0b11110000);
     try expect(vm.V[0xA] == 0b11010000);
     try expect(vm.PC == 0x202);
+}
+
+test "Interpreter draws sprite (DXYN)" {
+    var vm = Interpreter.init(null);
+    const s = vm.screen();
+
+    // Draw a 0 at (0, 0).
+    // No offset, simplest case.
+    vm.I = 0;
+    vm.draw(0, 0, 5);
+
+    // Draw a 1 at (16, 0).
+    // Has X offset at multiple of 8.
+    vm.I = 5;
+    vm.draw(16, 0, 5);
+
+    // Draw a 2 at (0, 16).
+    // Has Y offset at multiple of 8.
+    vm.I = 10;
+    vm.draw(0, 16, 5);
+
+    // Draw a 3 at (16, 16).
+    // Has X and Y offset at multiples of 8.
+    vm.I = 15;
+    vm.draw(16, 16, 5);
+
+    // Draw a 5 at (26, 0).
+    // Has X and Y offsets, but X is not a multiple of 8
+    vm.I = 25;
+    vm.draw(25, 0, 5);
+
+    // Draw a 9 at (31, 16).
+    // Has X and Y offsets, neither of which are multiples of X
+    // The drawing spans 2 separate bytes
+    vm.I = 45;
+    vm.draw(30, 16, 5);
+
+    // Draw a 7 at (63, 8).
+    // This drawing wraps around the X axis.
+    vm.I = 35;
+    vm.draw(62, 8, 5);
+
+    // Draw a 8 at (8, 30).
+    // This drawing wraps around the Y axis.
+    vm.I = 40;
+    vm.draw(8, 30, 5);
+
+    // var i: usize = 0;
+    // while (i < 32) : (i += 1) {
+    //     print("\n{b:0>8}", .{s[8 * i .. 8 * (i + 1)]});
+    // }
+
+    // 0xF0, 0x90, 0x90, 0x90, 0xF0 // 0
+    try expect(s[0] == 0xF0);
+    try expect(s[8] == 0x90);
+    try expect(s[16] == 0x90);
+    try expect(s[24] == 0x90);
+    try expect(s[32] == 0xF0);
+
+    // 0x20, 0x60, 0x20, 0x20, 0x70 // 1
+    try expect(s[2] == 0x20);
+    try expect(s[10] == 0x60);
+    try expect(s[18] == 0x20);
+    try expect(s[26] == 0x20);
+    try expect(s[34] == 0x70);
+
+    // 0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+    try expect(s[128] == 0xF0);
+    try expect(s[136] == 0x10);
+    try expect(s[144] == 0xF0);
+    try expect(s[152] == 0x80);
+    try expect(s[160] == 0xF0);
+
+    // 0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+    try expect(s[130] == 0xF0);
+    try expect(s[138] == 0x10);
+    try expect(s[146] == 0xF0);
+    try expect(s[154] == 0x10);
+    try expect(s[162] == 0xF0);
+
+    // 0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+    try expect(s[3] == 0x78);
+    try expect(s[11] == 0x40);
+    try expect(s[19] == 0x78);
+    try expect(s[27] == 0x08);
+    try expect(s[35] == 0x78);
+
+    // 0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+    try expect(s[131] == 0x03);
+    try expect(s[132] == 0xC0);
+    try expect(s[139] == 0x02);
+    try expect(s[140] == 0x40);
+    try expect(s[147] == 0x03);
+    try expect(s[148] == 0xC0);
+    try expect(s[155] == 0x00);
+    try expect(s[156] == 0x40);
+    try expect(s[163] == 0x03);
+    try expect(s[164] == 0xC0);
+
+    // 0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+    try expect(s[64] == 0xC0);
+    try expect(s[71] == 0x03);
+    try expect(s[72] == 0x40);
+    try expect(s[79] == 0x00);
+    try expect(s[80] == 0x80);
+    try expect(s[87] == 0x00);
+    try expect(s[88] == 0x00);
+    try expect(s[95] == 0x01);
+    try expect(s[96] == 0x00);
+    try expect(s[103] == 0x01);
+
+    // 0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+    try expect(s[1] == 0xF0);
+    try expect(s[9] == 0x90);
+    try expect(s[17] == 0xF0);
+    try expect(s[241] == 0xF0);
+    try expect(s[249] == 0x90);
+}
+
+test "splitMask helper splits masks correctly" {
+    var res = Interpreter.splitMask(0b10101111, 4);
+    try expect(res.left == 0b1010);
+    try expect(res.right == 0b11110000);
+
+    res = Interpreter.splitMask(0b01001101, 2);
+    try expect(res.left == 0b00010011);
+    try expect(res.right == 0b01000000);
+
+    res = Interpreter.splitMask(0b11001101, 3);
+    try expect(res.left == 0b00011001);
+    try expect(res.right == 0b10100000);
 }
