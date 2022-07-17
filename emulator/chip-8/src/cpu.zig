@@ -285,6 +285,11 @@ pub const Cpu = struct {
         self.V[register] = key;
         self.PC += 2;
     }
+
+    pub fn setDelayTimer(self: *Self, register: u4) void {
+        self.delay_timer.set(self.V[register]);
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -823,4 +828,13 @@ test "Cpu waits for keypress and stores result in VX (FX0A)" {
 
     try expect(cpu.V[0xC] == 6);
     try expect(cpu.PC == 0x204);
+}
+
+test "Cpu sets delay timer to value found in VX (FX15)" {
+    var cpu = getTestCpu();
+
+    cpu.V[0xA] = 10;
+    cpu.setDelayTimer(0xA);
+    try expect(cpu.delay_timer.value == 10);
+    try expect(cpu.PC == 0x202);
 }
