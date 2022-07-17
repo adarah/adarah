@@ -173,6 +173,7 @@ pub const Cpu = struct {
         self.PC += 2;
     }
 
+    // TODO: Implement VF setting alternative behaviour
     pub fn shiftLeft(self: *Self, registerX: u4, registerY: u4) void {
         const overflow = @shlWithOverflow(u8, self.V[registerY], 1, &self.V[registerX]);
         self.V[0xF] = @boolToInt(overflow);
@@ -200,6 +201,7 @@ pub const Cpu = struct {
         self.PC += 2;
     }
 
+    // TODO: Implement alternative wrapping behaviour
     // Pixel addresses might not perfectly align with our bytes (happens on 87.5% of cases)
     // When painting pixels, we should fetch the current and the "next" byte.
     // The "next" byte might not be the immediatelly following byte in case we are near one of the edges of the screen.
@@ -221,13 +223,23 @@ pub const Cpu = struct {
         const x_second = @mod(_x + 7, 64) / 8; // 7 at most
         const bits_first = @intCast(u3, @mod(@mod(_x, 64), 8)); // 0-7
         const _screen = self.screen();
+        self.V[0xF] = 0;
         var i: usize = 0;
         while (i < height) : (i += 1) {
             const offset = 8 * i;
             const sprite_data = self.mem[self.I + i];
             const masks = Cpu.splitMask(sprite_data, bits_first);
-            _screen[@mod(y + x_first + offset, 256)] ^= masks.left;
-            _screen[@mod(y + x_second + offset, 256)] ^= masks.right;
+            const pos_first = @mod(y + x_first + offset, 256);
+            const pos_second = @mod(y + x_second + offset, 256);
+
+            // Flips from 1 to 0 happens when the mask and the number have 1s in the same position
+            // So we apply a binary AND the check if there's any remaining ones. This can
+            // be done by verifying if the number if larger than 0
+            self.V[0xF] |= @boolToInt((masks.left & _screen[pos_first]) != 0);
+            self.V[0xF] |= @boolToInt((masks.right & _screen[pos_second]) != 0);
+
+            _screen[pos_first] ^= masks.left;
+            _screen[pos_second] ^= masks.right;
         }
     }
 
@@ -722,6 +734,22 @@ test "Cpu draws sprite (DXYN)" {
     try expect(s[17] == 0xF0);
     try expect(s[241] == 0xF0);
     try expect(s[249] == 0x90);
+}
+
+test "Cpu sets VF if drawing erases any pixels" {
+    var keypad = Keypad.init();
+    var cpu = Cpu.init(.{ .keypad = &keypad, .seed = 0 });
+
+    cpu.I = 0;
+    cpu.V[0xF] = 1;
+
+    // Draw unsets VF if no collisions happen
+    cpu.draw(0, 0, 5);
+    try expect(cpu.V[0xF] == 0);
+
+    // Draw sets VF since a collision happened
+    cpu.draw(0, 4, 5);
+    try expect(cpu.V[0xF] == 1);
 }
 
 test "splitMask helper splits masks correctly" {
