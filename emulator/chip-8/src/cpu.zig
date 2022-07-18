@@ -153,7 +153,7 @@ pub const Cpu = struct {
     }
 
     pub fn callSubroutine(self: *Self, address: u16) void {
-        self.stackPush(self.SP);
+        self.stackPush(self.PC);
         self.PC = address;
     }
 
@@ -165,7 +165,7 @@ pub const Cpu = struct {
     }
 
     pub fn returnFromSubroutine(self: *Self) void {
-        self.SP = self.stackPop();
+        self.PC = self.stackPop();
     }
 
     pub fn jump(self: *Self, address: u16) void {
@@ -414,6 +414,7 @@ pub const Cpu = struct {
 const expect = std.testing.expect;
 const expectError = std.testing.expectError;
 const print = std.debug.print;
+const Loader = @import("./loader.zig").Loader;
 
 var test_keypad: Keypad = undefined;
 var test_sound_timer: Timer = undefined;
@@ -421,6 +422,7 @@ var test_delay_timer: Timer = undefined;
 
 fn getTestCpu() Cpu {
     var memory: [4096]u8 = std.mem.zeroes([4096]u8);
+    Loader.loadFonts(&memory);
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
@@ -451,11 +453,11 @@ test "Cpu returns from subroutine (00EE)" {
     cpu.stackPush(0x800);
 
     cpu.returnFromSubroutine();
-    try expect(cpu.SP == 0xECB);
+    try expect(cpu.SP == 0xECD);
     try expect(cpu.PC == 0x800);
 
     cpu.returnFromSubroutine();
-    try expect(cpu.SP == 0xECC);
+    try expect(cpu.SP == 0xECF);
     try expect(cpu.PC == 0x500);
 }
 
@@ -474,12 +476,13 @@ test "Cpu calls subroutine (2NNN)" {
 
     cpu.callSubroutine(0x300);
     try expect(cpu.PC == 0x300);
-    try expect(cpu.SP == 0xECE);
+    try expect(cpu.SP == 0xECD);
+    print("\n stack top is {}\n", .{cpu.stackPeek()});
     try expect(cpu.stackPeek() == 0x200);
 
     cpu.callSubroutine(0x500);
     try expect(cpu.PC == 0x500);
-    try expect(cpu.SP == 0xECD);
+    try expect(cpu.SP == 0xECB);
     try expect(cpu.stackPeek() == 0x300);
 }
 

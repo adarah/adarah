@@ -49,4 +49,4 @@ test "Loader loads fonts" {
     }
 }
 
-test "Loader loads game"
+test "Loader loads game" {}
