@@ -19,13 +19,12 @@ pub const Cpu = struct {
 
     // Memory
     mem: [mem_size]u8,
-    stack: [16]u16 = std.mem.zeroes([16]u16),
 
     // Registers
     V: [16]u8 = std.mem.zeroes([16]u8),
     I: u16 = 0,
     PC: u16 = 0x200,
-    SP: u8 = 0xECF,
+    SP: u16 = 0xECF,
 
     // Helpers
     keypad: *Keypad,
@@ -46,21 +45,39 @@ pub const Cpu = struct {
         return self.mem[mem_size - 256 ..];
     }
 
+    inline fn stackPush(self: *Self, address: u16) void {
+        // Chip-8 is big endian, so the most significant byte goes in a lower memory address
+        self.mem[self.SP - 1] = @truncate(u8, @shrExact(address & 0xFF00, 8));
+        self.mem[self.SP] = @truncate(u8, address);
+        self.SP -= 2;
+    }
+
+    inline fn stackPop(self: *Self) u16 {
+        // Chip-8 is big endian, so the most significant byte goes in a lower memory address
+        const msb = @as(u16, self.mem[self.SP + 1]);
+        const lsb = self.mem[self.SP + 2];
+        self.SP += 2;
+        return @shlExact(msb, 8) + lsb;
+    }
+
     inline fn stackPeek(self: *Self) u16 {
-        // SP always points to next available position, so SP-1 contains the top of the stack
-        return self.stack[self.SP - 1];
+        // SP always points to next available position, so SP+1 contains the top of the stack
+        // (remember, stacks grow downwards)
+        const msb = @as(u16, self.mem[self.SP + 1]);
+        const lsb = self.mem[self.SP + 2];
+        return @shlExact(msb, 8) + lsb;
     }
 
     pub fn fetchDecodeExecute(self: *Self) void {
         const first = self.mem[self.PC];
         const second = self.mem[self.PC + 1];
 
-        const a: u4 = @intCast(u4, @shrExact(first & 0xF0, 4));
-        const b: u4 = @intCast(u4, first & 0x0F);
-        const c: u4 = @intCast(u4, @shrExact(second & 0xF0, 4));
-        const d: u4 = @intCast(u4, second & 0x0F);
+        const a: u4 = @truncate(u4, @shrExact(first & 0xF0, 4));
+        const b: u4 = @truncate(u4, first);
+        const c: u4 = @truncate(u4, @shrExact(second & 0xF0, 4));
+        const d: u4 = @truncate(u4, second);
 
-        const nnn: u16 = @as(u16, b) * 0x100 + second;
+        const nnn: u16 = @shlExact(@as(u16, b), 2) + second;
         const instruction: [2]u8 = [_]u8{ first, second };
         wasm.log("fetched {}", .{fmt.fmtSliceHexUpper(&instruction)});
         wasm.log("PC: {}", .{self.PC});
@@ -136,8 +153,7 @@ pub const Cpu = struct {
     }
 
     pub fn callSubroutine(self: *Self, address: u16) void {
-        self.stack[self.SP] = self.PC;
-        self.SP += 1;
+        self.stackPush(self.SP);
         self.PC = address;
     }
 
@@ -149,8 +165,7 @@ pub const Cpu = struct {
     }
 
     pub fn returnFromSubroutine(self: *Self) void {
-        self.SP -= 1;
-        self.PC = self.stack[self.SP];
+        self.SP = self.stackPop();
     }
 
     pub fn jump(self: *Self, address: u16) void {
@@ -432,17 +447,15 @@ test "Cpu clears screens (00E0)" {
 
 test "Cpu returns from subroutine (00EE)" {
     var cpu = getTestCpu();
-
-    cpu.stack[0] = 0x500;
-    cpu.stack[1] = 0x800;
-    cpu.SP = 2;
+    cpu.stackPush(0x500);
+    cpu.stackPush(0x800);
 
     cpu.returnFromSubroutine();
-    try expect(cpu.SP == 1);
+    try expect(cpu.SP == 0xECB);
     try expect(cpu.PC == 0x800);
 
     cpu.returnFromSubroutine();
-    try expect(cpu.SP == 0);
+    try expect(cpu.SP == 0xECC);
     try expect(cpu.PC == 0x500);
 }
 
@@ -461,12 +474,12 @@ test "Cpu calls subroutine (2NNN)" {
 
     cpu.callSubroutine(0x300);
     try expect(cpu.PC == 0x300);
-    try expect(cpu.SP == 1);
+    try expect(cpu.SP == 0xECE);
     try expect(cpu.stackPeek() == 0x200);
 
     cpu.callSubroutine(0x500);
     try expect(cpu.PC == 0x500);
-    try expect(cpu.SP == 2);
+    try expect(cpu.SP == 0xECD);
     try expect(cpu.stackPeek() == 0x300);
 }
 
