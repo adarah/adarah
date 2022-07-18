@@ -34,7 +34,9 @@ const imports = {
 const obj = await WebAssembly.instantiateStreaming(fetch('/static/chip-8.wasm'), imports)
 
 let instance = obj.instance;
-instance.exports.init(500, performance.now());
+const game = new Uint8Array(instance.exports.memory.buffer, 0, 5);
+game.set([1, 2, 3, 0, 1]);
+instance.exports.init(getRandomSeed(), performance.now(), 500, game.byteOffset, game.length);
 
 // Setup key handlers
 document.addEventListener('keydown', event => {

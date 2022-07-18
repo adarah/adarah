@@ -15,7 +15,7 @@ var keypad: Keypad = undefined;
 var sound_timer: Timer = undefined;
 var delay_timer: Timer = undefined;
 
-var cpu_clock_speed_hz: c_int = undefined;
+var cpu_clock_frequency_hz: c_int = undefined;
 var prev_time_ms: c_int = undefined;
 
 // This is the panic handler. Use util.panic for better convenience.
@@ -31,15 +31,19 @@ pub fn panic(message: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     }
 }
 
-export fn init(clock_speed_hz: c_int, start_time_ms: c_int) void {
-    const seed = @intCast(u64, wasm.getRandomSeed());
+export fn init(seed: c_uint, start_time: c_int, clock_frequency_hz: c_int, game_data: [*]const u8, game_length: c_uint) void {
+    cpu_clock_frequency_hz = clock_frequency_hz;
+    prev_time_ms = start_time;
+
     var mem: [4096]u8 = std.mem.zeroes([4096]u8);
     Loader.loadFonts(&mem);
+
+    var game = game_data[0..game_length];
+    Loader.loadGame(&mem, game);
+
     keypad = Keypad.init();
     sound_timer = Timer.init(0);
     delay_timer = Timer.init(0);
-    cpu_clock_speed_hz = clock_speed_hz;
-    prev_time_ms = start_time_ms;
     cpu = Cpu.init(.{
         .seed = seed,
         .memory = mem,
@@ -69,7 +73,7 @@ var global_frame: @Frame(Cpu.fetchDecodeExecute) = undefined;
 
 export fn onAnimationFrame(now_time_ms: c_int) void {
     const elapsed = now_time_ms - prev_time_ms;
-    const num_instructions = @divFloor(elapsed * cpu_clock_speed_hz, 1000);
+    const num_instructions = @divFloor(elapsed * cpu_clock_frequency_hz, 1000);
 
     // Due to intentional imprecisions in the timer functions in the browser,
     // sometimes now is smaller than previous. Even if the time elapsed is positive,

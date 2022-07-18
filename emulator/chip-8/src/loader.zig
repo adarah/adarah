@@ -30,9 +30,9 @@ pub const Loader = struct {
         std.mem.copy(u8, buf, &Loader.FONTS);
     }
 
-    pub fn loadGame(buf: []u8, game: []u8) void {
-        for (game) |b, i| {
-            buf[GAME_START_ADDRESS + i] = b;
+    pub fn loadGame(buf: []u8, game: []const u8) void {
+        for (game) |byte, i| {
+            buf[GAME_START_ADDRESS + i] = byte;
         }
     }
 };
