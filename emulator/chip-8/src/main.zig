@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const wasm = @import("./wasm.zig");
 const c = @import("./consts.zig");
 const Cpu = @import("./cpu.zig").Cpu;
@@ -6,19 +7,35 @@ const Keypad = @import("./keypad.zig").Keypad;
 const Timer = @import("./timer.zig").Timer;
 const fmt = std.fmt;
 const testing = std.testing;
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-const allocator = gpa.allocator();
 
 var cpu: Cpu = undefined;
 var keypad: Keypad = undefined;
 var sound_timer: Timer = undefined;
 var delay_timer: Timer = undefined;
 
-export fn init() void {
+var cpu_clock_speed_hz: c_int = undefined;
+var prev_time_ms: c_int = undefined;
+
+// This is the panic handler. Use util.panic for easier convenience.
+pub fn panic(message: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
+    @setCold(true);
+    if (builtin.os.tag == .freestanding) {
+        wasm.err("{s}", .{message});
+        while (true) {
+            @breakpoint();
+        }
+    } else {
+        builtin.default_panic(message, trace);
+    }
+}
+
+export fn init(clock_speed_hz: c_int, start_time_ms: c_int) void {
     const seed = @intCast(u64, wasm.getRandomSeed());
     keypad = Keypad.init();
     sound_timer = Timer.init(0);
     delay_timer = Timer.init(0);
+    cpu_clock_speed_hz = clock_speed_hz;
+    prev_time_ms = start_time_ms;
     cpu = Cpu.init(.{
         .seed = seed,
         .keypad = &keypad,
@@ -56,19 +73,30 @@ export fn onKeydown(keycode: c_int) void {
     // https://laurencescotford.com/chip-8-on-the-cosmac-vip-keyboard-input/
     sound_timer.set(4);
     keypad.pressKey(key);
-
-    //     var msg = fmt.allocPrint(allocator, "Pressed {d}", .{key}) catch "err";
-    //     defer allocator.free(msg);
-    //     wasm.consoleLog(msg.ptr, msg.len);
+    wasm.log("Pressed {d}", .{key});
 }
 
 export fn onKeyup(keycode: c_int) void {
     const key = keycodeToKeypad(keycode) catch return;
     keypad.releaseKey(key);
+    wasm.log("Released {d}", .{key});
+}
 
-    // var msg = fmt.allocPrint(allocator, "Released {d}", .{key}) catch "err";
-    // defer allocator.free(msg);
-    // wasm.consoleLog(msg.ptr, msg.len);
+var global_frame: @Frame(Cpu.fetchDecodeExecute) = undefined;
+
+export fn onAnimationFrame(now_time_ms: c_int) void {
+    const elapsed = now_time_ms - prev_time_ms;
+    wasm.log("now: {} | prev: {}", .{ now_time_ms, prev_time_ms });
+    const cpu_cycles = @divFloor(elapsed * cpu_clock_speed_hz, 1000);
+    wasm.log("Instructions to execute {d}", .{cpu_cycles});
+    var i: usize = 0;
+    while (i < cpu_cycles) : (i += 1) {
+        global_frame = async cpu.fetchDecodeExecute();
+    }
+    wasm.log("Executed all", .{});
+    const screen = cpu.screen();
+    wasm.draw(screen, screen.len);
+    wasm.log("Finished drawing", .{});
 }
 
 export fn timerTick() void {

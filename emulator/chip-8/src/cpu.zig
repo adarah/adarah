@@ -1,9 +1,10 @@
 const std = @import("std");
 const Keypad = @import("./keypad.zig").Keypad;
 const Timer = @import("./timer.zig").Timer;
+const wasm = @import("./wasm.zig");
 const fmt = std.fmt;
 const rand = std.rand;
-const panic = std.debug.panic;
+const panic = @import("./util.zig").panic;
 
 const CpuOptions = struct {
     keypad: *Keypad,
@@ -61,7 +62,7 @@ pub const Cpu = struct {
         return Self{ .mem = mem, .rand = random, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer };
     }
 
-    inline fn screen(self: *Self) *[256]u8 {
+    pub inline fn screen(self: *Self) *[256]u8 {
         return self.mem[mem_size - 256 ..];
     }
 
@@ -74,23 +75,28 @@ pub const Cpu = struct {
         const first = self.mem[self.PC];
         const second = self.mem[self.PC + 1];
 
-        const a = @shrExact(first & 0xF0, 4);
-        const b = first & 0x0F;
-        const c = @shrExact(second & 0xF0, 4);
-        const d = second & 0x0F;
+        const a: u4 = @intCast(u4, @shrExact(first & 0xF0, 4));
+        const b: u4 = @intCast(u4, first & 0x0F);
+        const c: u4 = @intCast(u4, @shrExact(second & 0xF0, 4));
+        const d: u4 = @intCast(u4, second & 0x0F);
 
-        const nnn = b * 0x100 + second;
+        const nnn: u16 = @as(u16, b) * 0x100 + second;
+        const instruction: [2]u8 = [_]u8{ first, second };
+        wasm.log("fetched {}", .{fmt.fmtSliceHexUpper(&instruction)});
+        wasm.log("PC: {}", .{self.PC});
 
         switch (a) {
             0 => {
                 switch (second) {
                     0xE0 => self.clearScreen(),
                     0xEE => self.returnFromSubroutine(),
-                    else => self.syscall(nnn),
+                    else => self.syscall(nnn) catch |err| {
+                        panic("syscall error: {}", .{err});
+                    },
                 }
             },
             1 => self.jump(nnn),
-            2 => self.executeSubroutine(nnn),
+            2 => self.callSubroutine(nnn),
             3 => self.skipIfEqualLiteral(b, second),
             4 => self.skipIfNotEqualLiteral(b, second),
             5 => self.skipIfEqual(b, c),
@@ -136,8 +142,9 @@ pub const Cpu = struct {
                     else => unreachable,
                 }
             },
-            else => unreachable,
         }
+
+        wasm.log("PC: {}", .{self.PC});
     }
 
     // Instructions
@@ -283,7 +290,7 @@ pub const Cpu = struct {
     // Given the top-left "screen address" of a "pixel row", find the 2 bytes that will be affected
     // Split the mask in two parts, and apply them to both bytes via XOR
     // If any bit is ever unset, we set the VF register.
-    pub fn draw(self: *Self, X: u6, Y: u5, height: u5) void {
+    pub fn draw(self: *Self, X: u6, Y: u5, height: u8) void {
         const y = @intCast(u8, @mod(@as(usize, Y) * 8, 256)); // 31*8=248 at most
         const _x: usize = X;
         // In most situations, drawing something on the screen will require applying a mask to two differente bytes
