@@ -83,20 +83,33 @@ export fn onAnimationFrame(now_time_ms: c_int) void {
     }
     prev_time_ms = now_time_ms;
 
-    wasm.log("Instructions to execute {d}", .{num_instructions});
+    // wasm.log("Instructions to execute {d}", .{num_instructions});
     var i: usize = 0;
     while (i < num_instructions) : (i += 1) {
         global_frame = async cpu.fetchDecodeExecute();
     }
-    wasm.log("Executed all", .{});
+    // wasm.log("Executed all", .{});
     const display = cpu.display_buffer();
     wasm.draw(display, display.len);
-    wasm.log("Finished drawing", .{});
+    // wasm.log("Finished drawing", .{});
 }
 
 export fn timerTick() void {
     sound_timer.tick();
     delay_timer.tick();
+}
+
+export fn debugStep() void {
+    global_frame = async cpu.fetchDecodeExecute();
+
+    const V = cpu.registers();
+    wasm.setRegisters(cpu.PC, V, V.len);
+
+    const s = cpu.stack();
+    wasm.setStack(cpu.SP, s, s.len);
+
+    const display = cpu.display_buffer();
+    wasm.draw(display, display.len);
 }
 
 // var wait_frame: @Frame(Cpu.waitForKeypress) = undefined;
