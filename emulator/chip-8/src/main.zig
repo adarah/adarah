@@ -101,6 +101,19 @@ export fn timerTick() void {
     delay_timer.tick();
 }
 
+export fn debugStep() void {
+    global_frame = async cpu.fetchDecodeExecute();
+
+    const V = cpu.registers();
+    wasm.setRegisters(cpu.PC, V, V.len);
+
+    const s = cpu.stack();
+    wasm.setStack(cpu.SP, s, s.len);
+
+    const display = cpu.display_buffer();
+    wasm.draw(display, display.len);
+}
+
 // var wait_frame: @Frame(Cpu.waitForKeypress) = undefined;
 // var wait_frame2: @Frame(Cpu.waitForKeypress) = undefined;
 // var i: usize = 0;

@@ -73,7 +73,11 @@ pub const Cpu = struct {
         return @shlExact(msb, 8) + lsb;
     }
 
-    inline fn registers(self: *Self) *[16]u8 {
+    pub inline fn stack(self: *Self) *[48]u8 {
+        return self.mem[0xEA0..0xED0];
+    }
+
+    pub inline fn registers(self: *Self) *[16]u8 {
         return self.mem[0xEF0..0xF00];
     }
 
@@ -162,7 +166,7 @@ pub const Cpu = struct {
     }
 
     pub fn callSubroutine(self: *Self, address: u16) void {
-        self.stackPush(self.PC);
+        self.stackPush(self.PC + 2);
         self.PC = address;
     }
 
@@ -352,6 +356,7 @@ pub const Cpu = struct {
             display[pos_first] ^= masks.left;
             display[pos_second] ^= masks.right;
         }
+        self.PC += 2;
     }
 
     // splitMask splits a mask in two, leaving 8-N bits in the left mask, and N bits in the right mask
@@ -435,7 +440,6 @@ pub const Cpu = struct {
         self.PC += 2;
     }
 
-    // TODO: implement flag to switch to buggy spec
     pub fn dumpRegisters(self: *Self, register: u4) void {
         const V = self.registers();
         var i: usize = 0;
@@ -529,12 +533,12 @@ test "Cpu calls subroutine (2NNN)" {
     cpu.callSubroutine(0x300);
     try expect(cpu.PC == 0x300);
     try expect(cpu.SP == 0xECD);
-    try expect(cpu.stackPeek() == 0x200);
+    try expect(cpu.stackPeek() == 0x202);
 
     cpu.callSubroutine(0x500);
     try expect(cpu.PC == 0x500);
     try expect(cpu.SP == 0xECB);
-    try expect(cpu.stackPeek() == 0x300);
+    try expect(cpu.stackPeek() == 0x302);
 }
 
 test "Cpu skips next instruction if VX equals literal (3XNN)" {
@@ -976,6 +980,7 @@ test "Cpu draws sprite (DXYN)" {
     try expect(s[17] == 0xF0);
     try expect(s[241] == 0xF0);
     try expect(s[249] == 0x90);
+    try expect(cpu.PC == 0x210);
 }
 
 test "Cpu sets VF if drawing erases any pixels" {
