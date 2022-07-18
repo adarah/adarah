@@ -13,6 +13,7 @@ const CpuOptions = struct {
     delay_timer: *Timer,
     seed: u64,
     shift_quirk: bool,
+    register_quirk: bool,
 };
 
 pub const Cpu = struct {
@@ -34,6 +35,7 @@ pub const Cpu = struct {
 
     // Quirks
     shift_quirk: bool,
+    register_quirk: bool,
 
     const Self = @This();
 
@@ -41,7 +43,7 @@ pub const Cpu = struct {
         var prng = rand.DefaultPrng.init(options.seed);
         const random = prng.random();
 
-        return Self{ .mem = options.memory, .rand = random, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer, .shift_quirk = options.shift_quirk };
+        return Self{ .mem = options.memory, .rand = random, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer, .shift_quirk = options.shift_quirk, .register_quirk = options.register_quirk };
     }
 
     pub inline fn display_buffer(self: *Self) *[256]u8 {
@@ -87,7 +89,7 @@ pub const Cpu = struct {
         const nnn: u16 = @shlExact(@as(u16, b), 8) + second;
         const instruction: [2]u8 = [_]u8{ first, second };
         wasm.log("fetched {}", .{fmt.fmtSliceHexUpper(&instruction)});
-        wasm.log("PC: {}", .{self.PC});
+        // wasm.log("PC: {}", .{self.PC});
 
         switch (a) {
             0 => {
@@ -148,7 +150,7 @@ pub const Cpu = struct {
             },
         }
 
-        wasm.log("PC: {}", .{self.PC});
+        // wasm.log("PC: {}", .{self.PC});
     }
 
     // Instructions
@@ -437,10 +439,11 @@ pub const Cpu = struct {
     pub fn dumpRegisters(self: *Self, register: u4) void {
         const V = self.registers();
         var i: usize = 0;
-        while (i <= register) {
-            self.mem[self.I] = V[i];
-            i += 1;
-            self.I += 1;
+        while (i <= register) : (i += 1) {
+            self.mem[self.I + i] = V[i];
+        }
+        if (!self.register_quirk) {
+            self.I += register + 1;
         }
         self.PC += 2;
     }
@@ -448,10 +451,11 @@ pub const Cpu = struct {
     pub fn restoreRegisters(self: *Self, register: u4) void {
         const V = self.registers();
         var i: usize = 0;
-        while (i <= register) {
-            V[i] = self.mem[self.I];
-            i += 1;
-            self.I += 1;
+        while (i <= register) : (i += 1) {
+            V[i] = self.mem[self.I + i];
+        }
+        if (!self.register_quirk) {
+            self.I += register + 1;
         }
         self.PC += 2;
     }
@@ -474,7 +478,7 @@ fn getTestCpu() Cpu {
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
-    return Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false });
+    return Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false, .register_quirk = false });
 }
 
 test "Cpu makes syscall (0NNN)" {
@@ -720,7 +724,7 @@ test "Cpu right shifts VX into itself if quirk is enabled" {
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
-    var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = true });
+    var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = true, .register_quirk = false });
 
     const V = cpu.registers();
 
@@ -793,7 +797,7 @@ test "Cpu left shifts VX into itself if quirk is enabled" {
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
-    var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = true });
+    var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = true, .register_quirk = false });
 
     const V = cpu.registers();
 
@@ -1154,6 +1158,36 @@ test "Cpu dumps register into memory I (FX55)" {
     try expect(cpu.PC == 0x202);
 }
 
+test "Cpu dumps registers into memory but doesn't touch I if quirk is enabled" {
+    var memory: [4096]u8 = std.mem.zeroes([4096]u8);
+    Loader.loadFonts(&memory);
+    test_keypad = Keypad.init();
+    test_sound_timer = Timer.init(0);
+    test_delay_timer = Timer.init(0);
+    var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false, .register_quirk = true });
+    const V = cpu.registers();
+
+    var i: usize = 0;
+    while (i < 16) : (i += 1) {
+        V[i] = @intCast(u8, i);
+    }
+
+    cpu.I = 0x500;
+    cpu.dumpRegisters(5);
+
+    i = 0;
+    while (i < 16) : (i += 1) {
+        if (i <= 5) {
+            try expect(cpu.mem[0x500 + i] == @intCast(u8, i));
+        } else {
+            try expect(cpu.mem[0x500 + i] == 0);
+        }
+    }
+
+    try expect(cpu.I == 0x500);
+    try expect(cpu.PC == 0x202);
+}
+
 test "Cpu restores registers from memory I (FX65)" {
     var cpu = getTestCpu();
     const V = cpu.registers();
@@ -1175,6 +1209,35 @@ test "Cpu restores registers from memory I (FX65)" {
     }
 
     try expect(cpu.I == 0x500 + 5 + 1);
+    try expect(cpu.PC == 0x202);
+}
+
+test "Cpu restores registers from memory I but doesn't touch I if quirk is enabled" {
+    var memory: [4096]u8 = std.mem.zeroes([4096]u8);
+    Loader.loadFonts(&memory);
+    test_keypad = Keypad.init();
+    test_sound_timer = Timer.init(0);
+    test_delay_timer = Timer.init(0);
+    var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false, .register_quirk = true });
+    const V = cpu.registers();
+
+    var i: usize = 0;
+    while (i < 16) : (i += 1) {
+        cpu.mem[0x500 + i] = @intCast(u8, i);
+    }
+
+    cpu.I = 0x500;
+    cpu.restoreRegisters(5);
+
+    while (i < 16) : (i += 1) {
+        if (i <= 5) {
+            try expect(V[i] == @intCast(u8, i));
+        } else {
+            try expect(V[i] == 0);
+        }
+    }
+
+    try expect(cpu.I == 0x500);
     try expect(cpu.PC == 0x202);
 }
 

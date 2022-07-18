@@ -32,7 +32,7 @@ const imports = {
     },
 }
 
-const gameRes = await fetch('/static/games/TETRIS');
+const gameRes = await fetch('/static/games/test_ROMs/BC_test.ch8');
 const buffer = new Uint8Array(await gameRes.arrayBuffer());
 
 const obj = await WebAssembly.instantiateStreaming(fetch('/static/chip-8.wasm'), imports)
@@ -41,7 +41,7 @@ let instance = obj.instance;
 const game = new Uint8Array(instance.exports.memory.buffer, 0, buffer.length);
 game.set(buffer);
 
-instance.exports.init(getRandomSeed(), performance.now(), 500, game.byteOffset, buffer.length);
+instance.exports.init(getRandomSeed(), performance.now(), 500, true, true, game.byteOffset, buffer.length);
 
 // Setup key handlers
 document.addEventListener('keydown', event => {

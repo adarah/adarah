@@ -31,7 +31,7 @@ pub fn panic(message: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     }
 }
 
-export fn init(seed: c_uint, start_time: c_int, clock_frequency_hz: c_int, game_data: [*]const u8, game_length: c_int) void {
+export fn init(seed: c_uint, start_time: c_int, clock_frequency_hz: c_int, shift_quirk: bool, register_quirk: bool, game_data: [*]const u8, game_length: c_int) void {
     cpu_clock_frequency_hz = clock_frequency_hz;
     prev_time_ms = start_time;
 
@@ -50,6 +50,8 @@ export fn init(seed: c_uint, start_time: c_int, clock_frequency_hz: c_int, game_
         .keypad = &keypad,
         .sound_timer = &sound_timer,
         .delay_timer = &delay_timer,
+        .shift_quirk = shift_quirk,
+        .register_quirk = register_quirk,
     });
 }
 
@@ -83,15 +85,15 @@ export fn onAnimationFrame(now_time_ms: c_int) void {
     }
     prev_time_ms = now_time_ms;
 
-    wasm.log("Instructions to execute {d}", .{num_instructions});
+    // wasm.log("Instructions to execute {d}", .{num_instructions});
     var i: usize = 0;
     while (i < num_instructions) : (i += 1) {
         global_frame = async cpu.fetchDecodeExecute();
     }
-    wasm.log("Executed all", .{});
+    // wasm.log("Executed all", .{});
     const display = cpu.display_buffer();
     wasm.draw(display, display.len);
-    wasm.log("Finished drawing", .{});
+    // wasm.log("Finished drawing", .{});
 }
 
 export fn timerTick() void {
