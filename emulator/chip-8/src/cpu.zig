@@ -1,7 +1,7 @@
 const std = @import("std");
 const Keypad = @import("./keypad.zig").Keypad;
 const Timer = @import("./timer.zig").Timer;
-// const wasm = @import("./wasm.zig");
+const wasm = @import("./wasm.zig");
 const fmt = std.fmt;
 const rand = std.rand;
 const panic = @import("./util.zig").panic;
@@ -12,7 +12,6 @@ const CpuOptions = struct {
     sound_timer: *Timer,
     delay_timer: *Timer,
     seed: u64,
-    shift_quirk: bool,
 };
 
 pub const Cpu = struct {
@@ -32,24 +31,17 @@ pub const Cpu = struct {
     delay_timer: *Timer,
     rand: rand.Random,
 
-    // Quirks
-    shift_quirk: bool,
-
     const Self = @This();
 
     pub fn init(options: CpuOptions) Self {
         var prng = rand.DefaultPrng.init(options.seed);
         const random = prng.random();
 
-        return Self{ .mem = options.memory, .rand = random, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer, .shift_quirk = options.shift_quirk };
+        return Self{ .mem = options.memory, .rand = random, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer };
     }
 
     pub inline fn display_buffer(self: *Self) *[256]u8 {
         return self.mem[MEM_SIZE - 256 ..];
-    }
-
-    pub inline fn stack(self: *Self) *[48]u8 {
-        return self.mem[0xEA0..0xED0];
     }
 
     inline fn stackPush(self: *Self, address: u16) void {
@@ -75,7 +67,7 @@ pub const Cpu = struct {
         return @shlExact(msb, 8) + lsb;
     }
 
-    pub inline fn registers(self: *Self) *[16]u8 {
+    inline fn registers(self: *Self) *[16]u8 {
         return self.mem[0xEF0..0xF00];
     }
 
@@ -83,15 +75,15 @@ pub const Cpu = struct {
         const first = self.mem[self.PC];
         const second = self.mem[self.PC + 1];
 
-        const a: u4 = @intCast(u4, @shrExact(first & 0xF0, 4));
-        const b: u4 = @intCast(u4, first);
-        const c: u4 = @intCast(u4, @shrExact(second & 0xF0, 4));
-        const d: u4 = @intCast(u4, second);
+        const a: u4 = @truncate(u4, @shrExact(first & 0xF0, 4));
+        const b: u4 = @truncate(u4, first);
+        const c: u4 = @truncate(u4, @shrExact(second & 0xF0, 4));
+        const d: u4 = @truncate(u4, second);
 
         const nnn: u16 = @shlExact(@as(u16, b), 8) + second;
-        // const instruction: [2]u8 = [_]u8{ first, second };
-        // wasm.log("fetched {}", .{fmt.fmtSliceHexUpper(&instruction)});
-        // wasm.log("PC: {}", .{self.PC});
+        const instruction: [2]u8 = [_]u8{ first, second };
+        wasm.log("fetched {}", .{fmt.fmtSliceHexUpper(&instruction)});
+        wasm.log("PC: {}", .{self.PC});
 
         switch (a) {
             0 => {
@@ -152,7 +144,7 @@ pub const Cpu = struct {
             },
         }
 
-        // wasm.log("PC: {}", .{self.PC});
+        wasm.log("PC: {}", .{self.PC});
     }
 
     // Instructions
@@ -164,7 +156,7 @@ pub const Cpu = struct {
     }
 
     pub fn callSubroutine(self: *Self, address: u16) void {
-        self.stackPush(self.PC + 2);
+        self.stackPush(self.PC);
         self.PC = address;
     }
 
@@ -259,13 +251,8 @@ pub const Cpu = struct {
 
     pub fn shiftRight(self: *Self, registerX: u4, registerY: u4) void {
         const V = self.registers();
-        if (self.shift_quirk) {
-            V[0xF] = V[registerX] & 1;
-            V[registerX] >>= 1;
-        } else {
-            V[0xF] = V[registerY] & 1;
-            V[registerX] = V[registerY] >> 1;
-        }
+        V[registerX] = V[registerY] >> 1;
+        V[0xF] = V[registerY] & 1;
         self.PC += 2;
     }
 
@@ -349,7 +336,6 @@ pub const Cpu = struct {
             display[pos_first] ^= masks.left;
             display[pos_second] ^= masks.right;
         }
-        self.PC += 2;
     }
 
     // splitMask splits a mask in two, leaving 8-N bits in the left mask, and N bits in the right mask
@@ -388,7 +374,6 @@ pub const Cpu = struct {
     }
 
     pub fn waitForKeypress(self: *Self, register: u4) void {
-        // wasm.log("waiting!", .{});
         const key = await async self.keypad.waitForKeypress();
         const V = self.registers();
         V[register] = key;
@@ -469,24 +454,22 @@ var test_keypad: Keypad = undefined;
 var test_sound_timer: Timer = undefined;
 var test_delay_timer: Timer = undefined;
 
-fn getTestCpuOptions() CpuOptions {
+fn getTestCpu() Cpu {
     var memory: [4096]u8 = std.mem.zeroes([4096]u8);
     Loader.loadFonts(&memory);
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
-    return CpuOptions{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false };
+    return Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer });
 }
 
 test "Cpu makes syscall (0NNN)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     try expectError(error.NotImplemented, cpu.syscall(0x300));
 }
 
 test "Cpu clears screens (00E0)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     for (cpu.display_buffer()) |*b, i| {
         b.* = @intCast(u8, i);
     }
@@ -499,8 +482,7 @@ test "Cpu clears screens (00E0)" {
 }
 
 test "Cpu returns from subroutine (00EE)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     cpu.stackPush(0x500);
     cpu.stackPush(0x800);
 
@@ -514,8 +496,7 @@ test "Cpu returns from subroutine (00EE)" {
 }
 
 test "Cpu jumps to address (1NNN)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
 
     cpu.jump(0x300);
     try expect(cpu.PC == 0x300);
@@ -525,23 +506,21 @@ test "Cpu jumps to address (1NNN)" {
 }
 
 test "Cpu calls subroutine (2NNN)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
 
     cpu.callSubroutine(0x300);
     try expect(cpu.PC == 0x300);
     try expect(cpu.SP == 0xECD);
-    try expect(cpu.stackPeek() == 0x202);
+    try expect(cpu.stackPeek() == 0x200);
 
     cpu.callSubroutine(0x500);
     try expect(cpu.PC == 0x500);
     try expect(cpu.SP == 0xECB);
-    try expect(cpu.stackPeek() == 0x302);
+    try expect(cpu.stackPeek() == 0x300);
 }
 
 test "Cpu skips next instruction if VX equals literal (3XNN)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 0xFF;
@@ -554,8 +533,7 @@ test "Cpu skips next instruction if VX equals literal (3XNN)" {
 }
 
 test "Cpu skips next instruction if VX not equals literal (4XNN)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 0xFF;
@@ -568,8 +546,7 @@ test "Cpu skips next instruction if VX not equals literal (4XNN)" {
 }
 
 test "Cpu skips next instruction if VX equals VY (5XY0)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 0xFF;
@@ -585,8 +562,7 @@ test "Cpu skips next instruction if VX equals VY (5XY0)" {
 }
 
 test "Cpu stores literal into register (6XNN)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     cpu.storeLiteral(0xA, 0xFF);
@@ -599,8 +575,7 @@ test "Cpu stores literal into register (6XNN)" {
 }
 
 test "Cpu adds literal into register (7XNN)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     cpu.addLiteral(0xA, 0xFA);
@@ -614,8 +589,7 @@ test "Cpu adds literal into register (7XNN)" {
 }
 
 test "Cpu stores value from VY into VX (8XY0)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xB] = 0xBB;
@@ -626,8 +600,7 @@ test "Cpu stores value from VY into VX (8XY0)" {
 }
 
 test "Cpu bitwise ORs VX and VY (8XY1)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 0b0110;
@@ -638,8 +611,7 @@ test "Cpu bitwise ORs VX and VY (8XY1)" {
 }
 
 test "Cpu bitwise ANDs VX and VY (8XY2)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 0b0110;
@@ -650,8 +622,7 @@ test "Cpu bitwise ANDs VX and VY (8XY2)" {
 }
 
 test "Cpu bitwise XORs VX and VY (8XY3)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 0b1010;
@@ -662,8 +633,7 @@ test "Cpu bitwise XORs VX and VY (8XY3)" {
 }
 
 test "Cpu adds registers VX and VY and sets VF if overflow (8XY4)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 0xF0;
@@ -686,8 +656,7 @@ test "Cpu adds registers VX and VY and sets VF if overflow (8XY4)" {
 }
 
 test "Cpu subs registers VX and VY and sets VF if no underflow (8XY5)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 0x0F;
@@ -710,8 +679,7 @@ test "Cpu subs registers VX and VY and sets VF if no underflow (8XY5)" {
 }
 
 test "Cpu right shifts VY into VX and sets VF to the LSB (8XY6)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 0;
@@ -732,8 +700,7 @@ test "Cpu right shifts VY into VX and sets VF to the LSB (8XY6)" {
 }
 
 test "Cpu sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 0x09;
@@ -758,8 +725,7 @@ test "Cpu sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
 }
 
 test "Cpu left shifts VY into VX and sets VF to the MSB (8XYE)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 0;
@@ -780,8 +746,7 @@ test "Cpu left shifts VY into VX and sets VF to the MSB (8XYE)" {
 }
 
 test "Cpu skips if not equal register (9XY0)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 0x5;
@@ -796,8 +761,7 @@ test "Cpu skips if not equal register (9XY0)" {
 }
 
 test "Cpu stores memory address into I (ANNN)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
 
     cpu.storeAddress(0x300);
     try expect(cpu.I == 0x300);
@@ -805,8 +769,7 @@ test "Cpu stores memory address into I (ANNN)" {
 }
 
 test "Cpu jumps to NNN plus V0 (BNNN)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0] = 0x10;
@@ -816,19 +779,17 @@ test "Cpu jumps to NNN plus V0 (BNNN)" {
 }
 
 test "Cpu sets VX to a random number with mask (CXNN)" {
-    // Wtih seed 0, the first number is 223 = 0b11000100
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    // Wtih seed 0, the first number is 223 = 0b11011111
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     cpu.genRandom(0xA, 0b11110000);
-    try expect(V[0xA] == 0b11000000);
+    try expect(V[0xA] == 0b11010000);
     try expect(cpu.PC == 0x202);
 }
 
 test "Cpu draws sprite (DXYN)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const s = cpu.display_buffer();
 
     // Draw a 0 at (0, 0).
@@ -942,13 +903,10 @@ test "Cpu draws sprite (DXYN)" {
     try expect(s[17] == 0xF0);
     try expect(s[241] == 0xF0);
     try expect(s[249] == 0x90);
-
-    try expect(cpu.PC == 0x210);
 }
 
 test "Cpu sets VF if drawing erases any pixels" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     cpu.I = 0;
@@ -978,8 +936,7 @@ test "splitMask helper splits masks correctly" {
 }
 
 test "Cpu skips next instruction if key in VX is pressed (EX9E)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     test_keypad.pressKey(7);
@@ -994,8 +951,7 @@ test "Cpu skips next instruction if key in VX is pressed (EX9E)" {
 }
 
 test "Cpu skips next instruction f key in VX is not pressed (EXA1)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     test_keypad.pressKey(7);
@@ -1010,8 +966,7 @@ test "Cpu skips next instruction f key in VX is not pressed (EXA1)" {
 }
 
 test "Cpu stores the value of the delay timer in VX (FX07)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     cpu.delay_timer.value = 10;
@@ -1021,8 +976,7 @@ test "Cpu stores the value of the delay timer in VX (FX07)" {
 }
 
 test "Cpu waits for keypress and stores result in VX (FX0A)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     var frame = async cpu.waitForKeypress(0xA);
@@ -1044,8 +998,7 @@ test "Cpu waits for keypress and stores result in VX (FX0A)" {
 }
 
 test "Cpu sets delay timer to value found in VX (FX15)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 10;
@@ -1055,8 +1008,7 @@ test "Cpu sets delay timer to value found in VX (FX15)" {
 }
 
 test "Cpu sets sound timer to value found in VX (FX18)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 10;
@@ -1072,8 +1024,7 @@ test "Cpu sets sound timer to value found in VX (FX18)" {
 }
 
 test "Cpu adds the value from VX into I (FX1E)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 5;
@@ -1085,8 +1036,7 @@ test "Cpu adds the value from VX into I (FX1E)" {
 }
 
 test "Cpu sets I to sprite found in VX (FX29)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 5;
@@ -1096,8 +1046,7 @@ test "Cpu sets I to sprite found in VX (FX29)" {
 }
 
 test "Cpu stores BCD of value in VX at I (FX33)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     V[0xA] = 123;
@@ -1112,8 +1061,7 @@ test "Cpu stores BCD of value in VX at I (FX33)" {
 }
 
 test "Cpu dumps register into memory I (FX55)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     var i: usize = 0;
@@ -1138,8 +1086,7 @@ test "Cpu dumps register into memory I (FX55)" {
 }
 
 test "Cpu restores registers from memory I (FX65)" {
-    var options = getTestCpuOptions();
-    var cpu = Cpu.init(options);
+    var cpu = getTestCpu();
     const V = cpu.registers();
 
     var i: usize = 0;
