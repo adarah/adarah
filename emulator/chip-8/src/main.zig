@@ -37,8 +37,6 @@ export fn init(seed: c_uint, start_time: c_int, clock_frequency_hz: c_int, game_
 
     var mem: [4096]u8 = std.mem.zeroes([4096]u8);
     Loader.loadFonts(&mem);
-    // const g = @intCast(isize, game_length);
-    wasm.log("{*} - {}", .{ game_data, game_length });
 
     var game = game_data[0..@intCast(usize, game_length)];
     Loader.loadGame(&mem, game);

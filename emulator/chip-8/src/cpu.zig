@@ -80,7 +80,7 @@ pub const Cpu = struct {
         const c: u4 = @truncate(u4, @shrExact(second & 0xF0, 4));
         const d: u4 = @truncate(u4, second);
 
-        const nnn: u16 = @shlExact(@as(u16, b), 2) + second;
+        const nnn: u16 = @shlExact(@as(u16, b), 8) + second;
         const instruction: [2]u8 = [_]u8{ first, second };
         wasm.log("fetched {}", .{fmt.fmtSliceHexUpper(&instruction)});
         wasm.log("PC: {}", .{self.PC});
@@ -511,7 +511,6 @@ test "Cpu calls subroutine (2NNN)" {
     cpu.callSubroutine(0x300);
     try expect(cpu.PC == 0x300);
     try expect(cpu.SP == 0xECD);
-    print("\n stack top is {}\n", .{cpu.stackPeek()});
     try expect(cpu.stackPeek() == 0x200);
 
     cpu.callSubroutine(0x500);
@@ -1113,12 +1112,12 @@ test "Cpu restores registers from memory I (FX65)" {
 test "decode extracts bits correctly" {
     const first = 0xAB;
     const second = 0xCD;
+    const a: u4 = @truncate(u4, @shrExact(first & 0xF0, 4));
+    const b: u4 = @truncate(u4, first);
+    const c: u4 = @truncate(u4, @shrExact(second & 0xF0, 4));
+    const d: u4 = @truncate(u4, second);
 
-    const a = @shrExact(first & 0xF0, 4);
-    const b = first & 0x0F;
-    const c = @shrExact(second & 0xF0, 4);
-    const d = second & 0x0F;
-    const nnn = b * 0x100 + second;
+    const nnn: u16 = @shlExact(@as(u16, b), 8) + second;
 
     try expect(a == 0xA);
     try expect(b == 0xB);
