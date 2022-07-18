@@ -12,6 +12,7 @@ const CpuOptions = struct {
     sound_timer: *Timer,
     delay_timer: *Timer,
     seed: u64,
+    shift_quirk: bool,
 };
 
 pub const Cpu = struct {
@@ -31,13 +32,16 @@ pub const Cpu = struct {
     delay_timer: *Timer,
     rand: rand.Random,
 
+    // Quirks
+    shift_quirk: bool,
+
     const Self = @This();
 
     pub fn init(options: CpuOptions) Self {
         var prng = rand.DefaultPrng.init(options.seed);
         const random = prng.random();
 
-        return Self{ .mem = options.memory, .rand = random, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer };
+        return Self{ .mem = options.memory, .rand = random, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer, .shift_quirk = options.shift_quirk };
     }
 
     pub inline fn display_buffer(self: *Self) *[256]u8 {
@@ -251,8 +255,13 @@ pub const Cpu = struct {
 
     pub fn shiftRight(self: *Self, registerX: u4, registerY: u4) void {
         const V = self.registers();
-        V[registerX] = V[registerY] >> 1;
-        V[0xF] = V[registerY] & 1;
+        if (self.shift_quirk) {
+            V[0xF] = V[registerX] & 1;
+            V[registerX] >>= 1;
+        } else {
+            V[0xF] = V[registerY] & 1;
+            V[registerX] = V[registerY] >> 1;
+        }
         self.PC += 2;
     }
 
@@ -460,7 +469,7 @@ fn getTestCpu() Cpu {
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
-    return Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer });
+    return Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false });
 }
 
 test "Cpu makes syscall (0NNN)" {
@@ -680,6 +689,7 @@ test "Cpu subs registers VX and VY and sets VF if no underflow (8XY5)" {
 
 test "Cpu right shifts VY into VX and sets VF to the LSB (8XY6)" {
     var cpu = getTestCpu();
+
     const V = cpu.registers();
 
     V[0xA] = 0;
@@ -695,6 +705,33 @@ test "Cpu right shifts VY into VX and sets VF to the LSB (8XY6)" {
     cpu.shiftRight(0xA, 0xB);
     try expect(V[0xA] == 0b0001);
     try expect(V[0xB] == 0b0010);
+    try expect(V[0xF] == 0);
+    try expect(cpu.PC == 0x204);
+}
+
+test "Cpu right shifts VX into itself if quirk is enabled" {
+    var memory: [4096]u8 = std.mem.zeroes([4096]u8);
+    Loader.loadFonts(&memory);
+    test_keypad = Keypad.init();
+    test_sound_timer = Timer.init(0);
+    test_delay_timer = Timer.init(0);
+    var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = true });
+
+    const V = cpu.registers();
+
+    V[0xA] = 0b1101;
+    V[0xB] = 0b1111;
+
+    cpu.shiftRight(0xA, 0xB);
+    try expect(V[0xA] == 0b0110);
+    try expect(V[0xB] == 0b1111);
+    try expect(V[0xF] == 1);
+    try expect(cpu.PC == 0x202);
+
+    V[0xA] = 0b0010;
+    cpu.shiftRight(0xA, 0xB);
+    try expect(V[0xA] == 0b0001);
+    try expect(V[0xB] == 0b1111);
     try expect(V[0xF] == 0);
     try expect(cpu.PC == 0x204);
 }
