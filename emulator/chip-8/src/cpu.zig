@@ -325,18 +325,18 @@ pub const Cpu = struct {
     // Given the top-left "screen address" of a "pixel row", find the 2 bytes that will be affected
     // Split the mask in two parts, and apply them to both bytes via XOR
     // If any bit is ever unset, we set the VF register.
-    pub fn draw(self: *Self, X: u6, Y: u5, height: u8) void {
+    pub fn draw(self: *Self, registerX: u4, registerY: u4, height: u8) void {
         const V = self.registers();
-        const y = @intCast(u8, @mod(@as(usize, Y) * 8, 256)); // 31*8=248 at most
-        const _x: usize = X;
+        const y = @intCast(u8, @mod(@as(usize, V[registerY]) * 8, 256)); // 31*8=248 at most
+        const x: usize = V[registerX];
         // In most situations, drawing something on the screen will require applying a mask to two differente bytes
         // Looking at X + 8 (with modulo) guarantees that we look at the next byte in the row (wrapped if needed).
         // But we don't want the next byte if X is exactly divisible by 8 since the mask is supposed to only affect one byte,
         // in such situations, so we use X + 7 instead.
         // This guarantees that we grab the next byte if and only if X is not divisible by 8.
-        const x_first = @mod(_x, 64) / 8; // 7 at most
-        const x_second = @mod(_x + 7, 64) / 8; // 7 at most
-        const bits_first = @intCast(u3, @mod(@mod(_x, 64), 8)); // 0-7
+        const x_first = @mod(x, 64) / 8; // 7 at most
+        const x_second = @mod(x + 7, 64) / 8; // 7 at most
+        const bits_first = @intCast(u3, @mod(@mod(x, 64), 8)); // 0-7
         const display = self.display_buffer();
         V[0xF] = 0;
         var i: usize = 0;
@@ -867,53 +867,70 @@ test "Cpu sets VX to a random number with mask (CXNN)" {
 
 test "Cpu draws sprite (DXYN)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
     const s = cpu.display_buffer();
 
     // Draw a 0 at (0, 0).
     // No offset, simplest case.
     cpu.I = 0;
-    cpu.draw(0, 0, 5);
+    V[0xA] = 0;
+    V[0xB] = 0;
+    cpu.draw(0xA, 0xB, 5);
 
     // Draw a 1 at (16, 0).
     // Has X offset at multiple of 8.
     cpu.I = 5;
-    cpu.draw(16, 0, 5);
+    V[0xA] = 16;
+    V[0xB] = 0;
+    cpu.draw(0xA, 0xB, 5);
 
     // Draw a 2 at (0, 16).
     // Has Y offset at multiple of 8.
     cpu.I = 10;
-    cpu.draw(0, 16, 5);
+    V[0xA] = 0;
+    V[0xB] = 16;
+    cpu.draw(0xA, 0xB, 5);
 
     // Draw a 3 at (16, 16).
     // Has X and Y offset at multiples of 8.
     cpu.I = 15;
-    cpu.draw(16, 16, 5);
+    V[0xA] = 16;
+    V[0xB] = 16;
+    cpu.draw(0xA, 0xB, 5);
 
-    // Draw a 5 at (26, 0).
+    // Draw a 5 at (25, 0).
     // Has X and Y offsets, but X is not a multiple of 8
     cpu.I = 25;
-    cpu.draw(25, 0, 5);
+    V[0xA] = 25;
+    V[0xB] = 0;
+    cpu.draw(0xA, 0xB, 5);
 
-    // Draw a 9 at (31, 16).
+    // Draw a 9 at (30, 16).
     // Has X and Y offsets, neither of which are multiples of X
     // The drawing spans 2 separate bytes
     cpu.I = 45;
-    cpu.draw(30, 16, 5);
+    V[0xA] = 30;
+    V[0xB] = 16;
+    cpu.draw(0xA, 0xB, 5);
 
-    // Draw a 7 at (63, 8).
+    // Draw a 7 at (62, 8).
     // This drawing wraps around the X axis.
     cpu.I = 35;
-    cpu.draw(62, 8, 5);
+    V[0xA] = 62;
+    V[0xB] = 8;
+    cpu.draw(0xA, 0xB, 5);
 
     // Draw a 8 at (8, 30).
     // This drawing wraps around the Y axis.
     cpu.I = 40;
-    cpu.draw(8, 30, 5);
+    V[0xA] = 8;
+    V[0xB] = 30;
+    cpu.draw(0xA, 0xB, 5);
 
-    // var i: usize = 0;
-    // while (i < 32) : (i += 1) {
-    //     print("\n{b:0>8}", .{s[8 * i .. 8 * (i + 1)]});
-    // }
+    var i: usize = 0;
+    while (i < 32) : (i += 1) {
+        print("\n{b:0>8}", .{s[8 * i .. 8 * (i + 1)]});
+    }
 
     // 0xF0, 0x90, 0x90, 0x90, 0xF0 // 0
     try expect(s[0] == 0xF0);
@@ -991,11 +1008,12 @@ test "Cpu sets VF if drawing erases any pixels" {
     V[0xF] = 1;
 
     // Draw unsets VF if no collisions happen
-    cpu.draw(0, 0, 5);
+    cpu.draw(0xA, 0xB, 5);
     try expect(V[0xF] == 0);
 
     // Draw sets VF since a collision happened
-    cpu.draw(0, 4, 5);
+    V[0xB] = 4;
+    cpu.draw(0xA, 0xB, 5);
     try expect(V[0xF] == 1);
 }
 
