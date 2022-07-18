@@ -275,7 +275,12 @@ pub const Cpu = struct {
     // TODO: Implement VF setting alternative behaviour
     pub fn shiftLeft(self: *Self, registerX: u4, registerY: u4) void {
         const V = self.registers();
-        const overflow = @shlWithOverflow(u8, V[registerY], 1, &V[registerX]);
+        var overflow: bool = undefined;
+        if (self.shift_quirk) {
+            overflow = @shlWithOverflow(u8, V[registerX], 1, &V[registerX]);
+        } else {
+            overflow = @shlWithOverflow(u8, V[registerY], 1, &V[registerX]);
+        }
         V[0xF] = @boolToInt(overflow);
         self.PC += 2;
     }
@@ -778,6 +783,33 @@ test "Cpu left shifts VY into VX and sets VF to the MSB (8XYE)" {
     cpu.shiftLeft(0xA, 0xB);
     try expect(V[0xA] == 0b01011110);
     try expect(V[0xB] == 0b00101111);
+    try expect(V[0xF] == 0);
+    try expect(cpu.PC == 0x204);
+}
+
+test "Cpu left shifts VX into itself if quirk is enabled" {
+    var memory: [4096]u8 = std.mem.zeroes([4096]u8);
+    Loader.loadFonts(&memory);
+    test_keypad = Keypad.init();
+    test_sound_timer = Timer.init(0);
+    test_delay_timer = Timer.init(0);
+    var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = true });
+
+    const V = cpu.registers();
+
+    V[0xA] = 0b11011111;
+    V[0xB] = 0;
+
+    cpu.shiftLeft(0xA, 0xB);
+    try expect(V[0xA] == 0b10111110);
+    try expect(V[0xB] == 0);
+    try expect(V[0xF] == 1);
+    try expect(cpu.PC == 0x202);
+
+    V[0xA] = 0b00101111;
+    cpu.shiftLeft(0xA, 0xB);
+    try expect(V[0xA] == 0b01011110);
+    try expect(V[0xB] == 0);
     try expect(V[0xF] == 0);
     try expect(cpu.PC == 0x204);
 }
