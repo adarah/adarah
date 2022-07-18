@@ -59,6 +59,10 @@ pub const Keypad = struct {
         // Gets resumed by the `releaseKey` method
         suspend {}
 
+        const msg = fmt.allocPrint(allocator, "Actually resumed for real!", .{}) catch "err";
+        defer allocator.free(msg);
+        wasm.consoleLog(msg.ptr, msg.len);
+
         return self.wait_res;
     }
 };

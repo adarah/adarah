@@ -56,27 +56,39 @@ export fn onKeydown(keycode: c_int) void {
     // https://laurencescotford.com/chip-8-on-the-cosmac-vip-keyboard-input/
     sound_timer.set(4);
     keypad.pressKey(key);
+
+    var msg = fmt.allocPrint(allocator, "Pressed {d}", .{key}) catch "err";
+    defer allocator.free(msg);
+    wasm.consoleLog(msg.ptr, msg.len);
 }
 
-// The optional arguments for this function will only be set if the `waitForKeypress` instruction was excuted.
-// As seen in the reference, the interpreter should only be notified once the key is released.
-// https://laurencescotford.com/chip-8-on-the-cosmac-vip-keyboard-input/
 export fn onKeyup(keycode: c_int) void {
     const key = keycodeToKeypad(keycode) catch return;
     keypad.releaseKey(key);
+
+    var msg = fmt.allocPrint(allocator, "Released {d}", .{key}) catch "err";
+    defer allocator.free(msg);
+    wasm.consoleLog(msg.ptr, msg.len);
 }
 
-export fn timer_tick() void {
+export fn timerTick() void {
     sound_timer.tick();
     delay_timer.tick();
 }
 
-// export fn emulate() void {
-//     while (true) {
-//         const msg = fmt.allocPrint(allocator, "Keyboard reading is {d}", .{interpreter.keyboard()[0]}) catch "err";
-//         consoleLog(msg.ptr, msg.len);
-//     }
-// }
+var wait_frame: @Frame(Cpu.waitForKeypress) = undefined;
+
+export fn waitForKey() void {
+    var msg = fmt.allocPrint(allocator, "waiting for keypress", .{}) catch "err";
+    defer allocator.free(msg);
+    wasm.consoleLog(msg.ptr, msg.len);
+
+    wait_frame = async cpu.waitForKeypress(0xA);
+
+    msg = fmt.allocPrint(allocator, "finished waiting!", .{}) catch "err";
+    defer allocator.free(msg);
+    wasm.consoleLog(msg.ptr, msg.len);
+}
 
 export fn add(a: i32, b: i32) i32 {
     const ans = a + b;
