@@ -7,6 +7,7 @@ const rand = std.rand;
 const panic = @import("./util.zig").panic;
 
 const CpuOptions = struct {
+    memory: [4096]u8,
     keypad: *Keypad,
     sound_timer: *Timer,
     delay_timer: *Timer,
@@ -24,7 +25,7 @@ pub const Cpu = struct {
     V: [16]u8 = std.mem.zeroes([16]u8),
     I: u16 = 0,
     PC: u16 = 0x200,
-    SP: u8 = 0,
+    SP: u8 = 0xECF,
 
     // Helpers
     keypad: *Keypad,
@@ -35,31 +36,10 @@ pub const Cpu = struct {
     const Self = @This();
 
     pub fn init(options: CpuOptions) Self {
-        // Bytes 0x00 trough 0x1FF are reserved for the interpreter, so we store the fonts here.
-        // TODO: Place fonts in the correct memory position in case any ROM abuses that data somehow
-        var mem = [0x50]u8{
-            0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-            0x20, 0x60, 0x20, 0x20, 0x70, // 1
-            0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-            0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-            0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-            0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-            0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-            0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-            0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-            0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-            0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-            0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-            0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-            0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-            0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-            0xF0, 0x80, 0xF0, 0x80, 0x80, // F
-        } ++ std.mem.zeroes([4096 - 0x50]u8);
-
         var prng = rand.DefaultPrng.init(options.seed);
         const random = prng.random();
 
-        return Self{ .mem = mem, .rand = random, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer };
+        return Self{ .mem = options.memory, .rand = random, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer };
     }
 
     pub inline fn screen(self: *Self) *[256]u8 {
@@ -425,20 +405,11 @@ var test_sound_timer: Timer = undefined;
 var test_delay_timer: Timer = undefined;
 
 fn getTestCpu() Cpu {
+    var memory: [4096]u8 = std.mem.zeroes([4096]u8);
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
-    return Cpu.init(.{ .seed = 0, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer });
-}
-
-test "Cpu inits fonts" {
-    const cpu = getTestCpu();
-    for (cpu.mem) |byte, i| {
-        if (i >= 0x50) {
-            break;
-        }
-        try expect(byte != 0);
-    }
+    return Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer });
 }
 
 test "Cpu makes syscall (0NNN)" {

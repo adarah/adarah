@@ -9,6 +9,7 @@ const Timer = @import("./timer.zig").Timer;
 const fmt = std.fmt;
 const testing = std.testing;
 
+var mem: Memory = undefined;
 var cpu: Cpu = undefined;
 var keypad: Keypad = undefined;
 var sound_timer: Timer = undefined;
