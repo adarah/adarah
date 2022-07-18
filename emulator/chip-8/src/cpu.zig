@@ -320,6 +320,14 @@ pub const Cpu = struct {
         self.mem[self.I + 2] = @mod(v, 10);
         self.PC += 2;
     }
+
+    pub fn dumpRegisters(self: *Self, register: u4) void {
+        var i: usize = 0;
+        while (i < register) : (i += 1) {
+            self.mem[self.I + i] = self.V[i];
+        }
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -903,7 +911,7 @@ test "Cpu sets I to sprite found in VX (FX29)" {
     try expect(cpu.PC == 0x202);
 }
 
-test "stored BCD of value in VX at I (FX33)" {
+test "Cpu stores BCD of value in VX at I (FX33)" {
     var cpu = getTestCpu();
     cpu.V[0xA] = 123;
     cpu.I = 0x500;
@@ -913,5 +921,28 @@ test "stored BCD of value in VX at I (FX33)" {
     try expect(cpu.mem[0x500] == 1);
     try expect(cpu.mem[0x501] == 2);
     try expect(cpu.mem[0x502] == 3);
+    try expect(cpu.PC == 0x202);
+}
+
+test "Cpu dumps register into memory I (FX55)" {
+    var cpu = getTestCpu();
+
+    var i: usize = 0;
+    while (i < 16) : (i += 1) {
+        cpu.V[i] = @intCast(u8, i);
+    }
+
+    cpu.I = 0x500;
+    cpu.dumpRegisters(5);
+
+    i = 0;
+    while (i < 16) : (i += 1) {
+        if (i < 5) {
+            try expect(cpu.mem[0x500 + i] == @intCast(u8, i));
+        } else {
+            try expect(cpu.mem[0x500 + i] == 0);
+        }
+    }
+
     try expect(cpu.PC == 0x202);
 }
