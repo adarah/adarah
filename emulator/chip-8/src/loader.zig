@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 pub const Loader = struct {
     // In the original COSMAC VIP, the fonts were stored in the ROM at address 8110.
@@ -28,6 +29,22 @@ pub const Loader = struct {
 
     pub fn loadFonts(buf: []u8) void {
         std.mem.copy(u8, buf, &Loader.FONTS);
+        switch (builtin.mode) {
+            .Debug => {
+                const COSMAC: [48]u8 = [_]u8{
+                    0xF9, 0xF3, 0xE6, 0xCF, 0x9F, 0x00, 0x00, 0x00,
+                    0x81, 0x12, 0x07, 0xC8, 0x90, 0x00, 0x00, 0x00,
+                    0x81, 0x13, 0xE5, 0x4F, 0x90, 0x00, 0x00, 0x00,
+                    0x81, 0x10, 0x24, 0x48, 0x90, 0x00, 0x00, 0x00,
+                    0xF9, 0xF3, 0xE4, 0x48, 0x90, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                };
+                for (buf[0xF00..]) |*b, i| {
+                    b.* = COSMAC[i];
+                }
+            },
+            else => {},
+        }
     }
 
     pub fn loadGame(buf: []u8, game: []const u8) void {
