@@ -57,18 +57,18 @@ export fn onKeydown(keycode: c_int) void {
     sound_timer.set(4);
     keypad.pressKey(key);
 
-    var msg = fmt.allocPrint(allocator, "Pressed {d}", .{key}) catch "err";
-    defer allocator.free(msg);
-    wasm.consoleLog(msg.ptr, msg.len);
+    //     var msg = fmt.allocPrint(allocator, "Pressed {d}", .{key}) catch "err";
+    //     defer allocator.free(msg);
+    //     wasm.consoleLog(msg.ptr, msg.len);
 }
 
 export fn onKeyup(keycode: c_int) void {
     const key = keycodeToKeypad(keycode) catch return;
     keypad.releaseKey(key);
 
-    var msg = fmt.allocPrint(allocator, "Released {d}", .{key}) catch "err";
-    defer allocator.free(msg);
-    wasm.consoleLog(msg.ptr, msg.len);
+    // var msg = fmt.allocPrint(allocator, "Released {d}", .{key}) catch "err";
+    // defer allocator.free(msg);
+    // wasm.consoleLog(msg.ptr, msg.len);
 }
 
 export fn timerTick() void {
@@ -76,28 +76,35 @@ export fn timerTick() void {
     delay_timer.tick();
 }
 
-var wait_frame: @Frame(Cpu.waitForKeypress) = undefined;
+// var wait_frame: @Frame(Cpu.waitForKeypress) = undefined;
+// var wait_frame2: @Frame(Cpu.waitForKeypress) = undefined;
+// var i: usize = 0;
 
-export fn waitForKey() void {
-    var msg = fmt.allocPrint(allocator, "waiting for keypress", .{}) catch "err";
-    defer allocator.free(msg);
-    wasm.consoleLog(msg.ptr, msg.len);
+// export fn waitForKey() void {
+//     var msg = fmt.allocPrint(allocator, "waiting for keypress", .{}) catch "err";
+//     defer allocator.free(msg);
+//     wasm.consoleLog(msg.ptr, msg.len);
 
-    wait_frame = async cpu.waitForKeypress(0xA);
+//     if (i == 0) {
+//         wait_frame = async cpu.waitForKeypress(0xA);
+//     } else {
+//         wait_frame2 = async cpu.waitForKeypress(0xA);
+//     }
+//     i += 1;
 
-    msg = fmt.allocPrint(allocator, "finished waiting!", .{}) catch "err";
-    defer allocator.free(msg);
-    wasm.consoleLog(msg.ptr, msg.len);
-}
+//     msg = fmt.allocPrint(allocator, "finished waiting {}!", .{i}) catch "err";
+//     defer allocator.free(msg);
+//     wasm.consoleLog(msg.ptr, msg.len);
+// }
 
-export fn add(a: i32, b: i32) i32 {
-    const ans = a + b;
-    const msg = fmt.allocPrint(allocator, "{d} + {d} is {d}", .{ a, b, ans }) catch "err";
-    defer allocator.free(msg);
-    wasm.consoleLog(msg.ptr, msg.len);
-    return ans;
-}
+// export fn add(a: i32, b: i32) i32 {
+//     const ans = a + b;
+//     const msg = fmt.allocPrint(allocator, "{d} + {d} is {d}", .{ a, b, ans }) catch "err";
+//     defer allocator.free(msg);
+//     wasm.consoleLog(msg.ptr, msg.len);
+//     return ans;
+// }
 
-test "basic add functionality" {
-    try testing.expect(add(3, 7) == 10);
-}
+// test "basic add functionality" {
+//     try testing.expect(add(3, 7) == 10);
+// }

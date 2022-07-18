@@ -36,3 +36,4 @@ const fromZig = instance.exports.add(1, 2);
 console.log(fromZig);
 
 instance.exports.waitForKey();
+instance.exports.waitForKey();

@@ -70,8 +70,74 @@ pub const Cpu = struct {
         return self.stack[self.SP - 1];
     }
 
-    pub fn keyboard(self: *Self) *[16]u8 {
-        return self.mem[0x100..0x110];
+    pub fn fetchDecodeExecute(self: *Self) void {
+        const first = self.mem[self.PC];
+        const second = self.mem[self.PC + 1];
+
+        const a = @shrExact(first & 0xF0, 4);
+        const b = first & 0x0F;
+        const c = @shrExact(second & 0xF0, 4);
+        const d = second & 0x0F;
+
+        const nnn = b * 0x100 + second;
+
+        switch (a) {
+            0 => {
+                switch (second) {
+                    0xE0 => self.clearScreen(),
+                    0xEE => self.returnFromSubroutine(),
+                    else => self.syscall(nnn),
+                }
+            },
+            1 => self.jump(nnn),
+            2 => self.executeSubroutine(nnn),
+            3 => self.skipIfEqualLiteral(b, second),
+            4 => self.skipIfNotEqualLiteral(b, second),
+            5 => self.skipIfEqual(b, c),
+            6 => self.storeLiteral(b, second),
+            7 => self.addLiteral(b, second),
+            8 => {
+                switch (d) {
+                    0 => self.store(b, c),
+                    1 => self.bitwiseOr(b, c),
+                    2 => self.bitwiseAnd(b, c),
+                    3 => self.bitwiseXor(b, c),
+                    4 => self.add(b, c),
+                    5 => self.sub(b, c),
+                    6 => self.shiftRight(b, c),
+                    7 => self.subStore(b, c),
+                    0xE => self.shiftLeft(b, c),
+                    else => unreachable,
+                }
+            },
+            9 => self.skipIfNotEqual(b, c),
+            0xA => self.storeAddress(nnn),
+            0xB => self.jumpWithOffset(nnn),
+            0xC => self.genRandom(b, second),
+            0xD => self.draw(b, c, d),
+            0xE => {
+                switch (second) {
+                    0x9E => self.skipIfPressed(b),
+                    0xA1 => self.skipIfNotPressed(b),
+                    else => unreachable,
+                }
+            },
+            0xF => {
+                switch (second) {
+                    0x07 => self.storeDelayTimer(b),
+                    0x0A => self.waitForKeypress(b),
+                    0x15 => self.setDelayTimer(b),
+                    0x18 => self.setSoundTimer(b),
+                    0x1E => self.addToI(b),
+                    0x29 => self.setSprite(b),
+                    0x33 => self.setBcd(b),
+                    0x55 => self.dumpRegisters(b),
+                    0x65 => self.restoreRegisters(b),
+                    else => unreachable,
+                }
+            },
+            else => unreachable,
+        }
     }
 
     // Instructions
@@ -980,4 +1046,21 @@ test "Cpu restores registers from memory I (FX65)" {
 
     try expect(cpu.I == 0x500 + 5 + 1);
     try expect(cpu.PC == 0x202);
+}
+
+test "decode extracts bits correctly" {
+    const first = 0xAB;
+    const second = 0xCD;
+
+    const a = @shrExact(first & 0xF0, 4);
+    const b = first & 0x0F;
+    const c = @shrExact(second & 0xF0, 4);
+    const d = second & 0x0F;
+    const nnn = b * 0x100 + second;
+
+    try expect(a == 0xA);
+    try expect(b == 0xB);
+    try expect(c == 0xC);
+    try expect(d == 0xD);
+    try expect(nnn == 0xBCD);
 }
