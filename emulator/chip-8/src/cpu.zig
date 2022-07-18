@@ -41,7 +41,7 @@ pub const Cpu = struct {
         return Self{ .mem = options.memory, .rand = random, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer };
     }
 
-    pub inline fn screen(self: *Self) *[256]u8 {
+    pub inline fn display_buffer(self: *Self) *[256]u8 {
         return self.mem[mem_size - 256 ..];
     }
 
@@ -158,7 +158,7 @@ pub const Cpu = struct {
     }
 
     pub fn clearScreen(self: *Self) void {
-        for (self.screen()) |*b| {
+        for (self.display_buffer()) |*b| {
             b.* = 0;
         }
         self.PC += 2;
@@ -296,7 +296,7 @@ pub const Cpu = struct {
         const x_first = @mod(_x, 64) / 8; // 7 at most
         const x_second = @mod(_x + 7, 64) / 8; // 7 at most
         const bits_first = @intCast(u3, @mod(@mod(_x, 64), 8)); // 0-7
-        const _screen = self.screen();
+        const display = self.display_buffer();
         self.V[0xF] = 0;
         var i: usize = 0;
         while (i < height) : (i += 1) {
@@ -309,11 +309,11 @@ pub const Cpu = struct {
             // Flips from 1 to 0 happens when the mask and the number have 1s in the same position
             // So we apply a binary AND the check if there's any remaining ones. This can
             // be done by verifying if the number if larger than 0
-            self.V[0xF] |= @boolToInt((masks.left & _screen[pos_first]) != 0);
-            self.V[0xF] |= @boolToInt((masks.right & _screen[pos_second]) != 0);
+            self.V[0xF] |= @boolToInt((masks.left & display[pos_first]) != 0);
+            self.V[0xF] |= @boolToInt((masks.right & display[pos_second]) != 0);
 
-            _screen[pos_first] ^= masks.left;
-            _screen[pos_second] ^= masks.right;
+            display[pos_first] ^= masks.left;
+            display[pos_second] ^= masks.right;
         }
     }
 
@@ -436,12 +436,12 @@ test "Cpu makes syscall (0NNN)" {
 
 test "Cpu clears screens (00E0)" {
     var cpu = getTestCpu();
-    for (cpu.screen()) |*b, i| {
+    for (cpu.display_buffer()) |*b, i| {
         b.* = @intCast(u8, i);
     }
 
     cpu.clearScreen();
-    for (cpu.screen()) |b| {
+    for (cpu.display_buffer()) |b| {
         try expect(b == 0);
     }
     try expect(cpu.PC == 0x202);
@@ -737,7 +737,7 @@ test "Cpu sets VX to a random number with mask (CXNN)" {
 
 test "Cpu draws sprite (DXYN)" {
     var cpu = getTestCpu();
-    const s = cpu.screen();
+    const s = cpu.display_buffer();
 
     // Draw a 0 at (0, 0).
     // No offset, simplest case.
