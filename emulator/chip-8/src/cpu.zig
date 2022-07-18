@@ -15,13 +15,12 @@ const CpuOptions = struct {
 };
 
 pub const Cpu = struct {
-    const mem_size = 4096;
+    const MEM_SIZE = 4096;
 
     // Memory
-    mem: [mem_size]u8,
+    mem: [MEM_SIZE]u8,
 
-    // Registers
-    V: [16]u8 = std.mem.zeroes([16]u8),
+    // Special Registers
     I: u16 = 0,
     PC: u16 = 0x200,
     SP: u16 = 0xECF,
@@ -42,7 +41,7 @@ pub const Cpu = struct {
     }
 
     pub inline fn display_buffer(self: *Self) *[256]u8 {
-        return self.mem[mem_size - 256 ..];
+        return self.mem[MEM_SIZE - 256 ..];
     }
 
     inline fn stackPush(self: *Self, address: u16) void {
@@ -66,6 +65,10 @@ pub const Cpu = struct {
         const msb = @as(u16, self.mem[self.SP + 1]);
         const lsb = self.mem[self.SP + 2];
         return @shlExact(msb, 8) + lsb;
+    }
+
+    inline fn registers(self: *Self) *[16]u8 {
+        return self.mem[0xEF0..0xF00];
     }
 
     pub fn fetchDecodeExecute(self: *Self) void {
@@ -173,89 +176,104 @@ pub const Cpu = struct {
     }
 
     pub fn skipIfEqualLiteral(self: *Self, register: u4, value: u8) void {
-        if (self.V[register] == value) {
+        const V = self.registers();
+        if (V[register] == value) {
             self.PC += 2;
         }
         self.PC += 2;
     }
 
     pub fn skipIfNotEqualLiteral(self: *Self, register: u4, value: u8) void {
-        if (self.V[register] != value) {
+        const V = self.registers();
+        if (V[register] != value) {
             self.PC += 2;
         }
         self.PC += 2;
     }
 
     pub fn skipIfEqual(self: *Self, registerX: u4, registerY: u4) void {
-        if (self.V[registerX] == self.V[registerY]) {
+        const V = self.registers();
+        if (V[registerX] == V[registerY]) {
             self.PC += 2;
         }
         self.PC += 2;
     }
 
     pub fn storeLiteral(self: *Self, register: u4, value: u8) void {
-        self.V[register] = value;
+        const V = self.registers();
+        V[register] = value;
         self.PC += 2;
     }
 
     pub fn addLiteral(self: *Self, register: u4, value: u8) void {
-        self.V[register] +%= value;
+        const V = self.registers();
+        V[register] +%= value;
         self.PC += 2;
     }
 
     pub fn store(self: *Self, registerX: u4, registerY: u4) void {
-        self.V[registerX] = self.V[registerY];
+        const V = self.registers();
+        V[registerX] = V[registerY];
         self.PC += 2;
     }
 
     pub fn bitwiseOr(self: *Self, registerX: u4, registerY: u4) void {
-        self.V[registerX] |= self.V[registerY];
+        const V = self.registers();
+        V[registerX] |= V[registerY];
         self.PC += 2;
     }
 
     pub fn bitwiseAnd(self: *Self, registerX: u4, registerY: u4) void {
-        self.V[registerX] &= self.V[registerY];
+        const V = self.registers();
+        V[registerX] &= V[registerY];
         self.PC += 2;
     }
 
     pub fn bitwiseXor(self: *Self, registerX: u4, registerY: u4) void {
-        self.V[registerX] ^= self.V[registerY];
+        const V = self.registers();
+        V[registerX] ^= V[registerY];
         self.PC += 2;
     }
 
     pub fn add(self: *Self, registerX: u4, registerY: u4) void {
-        const overflow = @addWithOverflow(u8, self.V[registerX], self.V[registerY], &self.V[registerX]);
-        self.V[0xF] = @boolToInt(overflow);
+        const V = self.registers();
+        const overflow = @addWithOverflow(u8, V[registerX], V[registerY], &V[registerX]);
+        V[0xF] = @boolToInt(overflow);
         self.PC += 2;
     }
 
     pub fn sub(self: *Self, registerX: u4, registerY: u4) void {
-        const underflow = @subWithOverflow(u8, self.V[registerX], self.V[registerY], &self.V[registerX]);
-        self.V[0xF] = @boolToInt(!underflow);
+        const V = self.registers();
+        const underflow = @subWithOverflow(u8, V[registerX], V[registerY], &V[registerX]);
+        V[0xF] = @boolToInt(!underflow);
         self.PC += 2;
     }
 
     pub fn shiftRight(self: *Self, registerX: u4, registerY: u4) void {
-        self.V[registerX] = self.V[registerY] >> 1;
-        self.V[0xF] = self.V[registerY] & 1;
+        const V = self.registers();
+        V[registerX] = V[registerY] >> 1;
+        V[0xF] = V[registerY] & 1;
         self.PC += 2;
     }
 
     pub fn subStore(self: *Self, registerX: u4, registerY: u4) void {
-        const underflow = @subWithOverflow(u8, self.V[registerY], self.V[registerX], &self.V[registerX]);
-        self.V[0xF] = @boolToInt(!underflow);
+        const V = self.registers();
+        const underflow = @subWithOverflow(u8, V[registerY], V[registerX], &V[registerX]);
+        V[0xF] = @boolToInt(!underflow);
         self.PC += 2;
     }
 
     // TODO: Implement VF setting alternative behaviour
     pub fn shiftLeft(self: *Self, registerX: u4, registerY: u4) void {
-        const overflow = @shlWithOverflow(u8, self.V[registerY], 1, &self.V[registerX]);
-        self.V[0xF] = @boolToInt(overflow);
+        const V = self.registers();
+        const overflow = @shlWithOverflow(u8, V[registerY], 1, &V[registerX]);
+        V[0xF] = @boolToInt(overflow);
         self.PC += 2;
     }
 
     pub fn skipIfNotEqual(self: *Self, registerX: u4, registerY: u4) void {
-        if (self.V[registerX] != self.V[registerY]) {
+        const V = self.registers();
+        if (V[registerX] != V[registerY]) {
             self.PC += 2;
         }
         self.PC += 2;
@@ -267,11 +285,13 @@ pub const Cpu = struct {
     }
 
     pub fn jumpWithOffset(self: *Self, address: u16) void {
-        self.PC = self.V[0] + address;
+        const V = self.registers();
+        self.PC = V[0] + address;
     }
 
     pub fn genRandom(self: *Self, register: u4, mask: u8) void {
-        self.V[register] = self.rand.int(u8) & mask;
+        const V = self.registers();
+        V[register] = self.rand.int(u8) & mask;
         self.PC += 2;
     }
 
@@ -286,6 +306,7 @@ pub const Cpu = struct {
     // Split the mask in two parts, and apply them to both bytes via XOR
     // If any bit is ever unset, we set the VF register.
     pub fn draw(self: *Self, X: u6, Y: u5, height: u8) void {
+        const V = self.registers();
         const y = @intCast(u8, @mod(@as(usize, Y) * 8, 256)); // 31*8=248 at most
         const _x: usize = X;
         // In most situations, drawing something on the screen will require applying a mask to two differente bytes
@@ -297,7 +318,7 @@ pub const Cpu = struct {
         const x_second = @mod(_x + 7, 64) / 8; // 7 at most
         const bits_first = @intCast(u3, @mod(@mod(_x, 64), 8)); // 0-7
         const display = self.display_buffer();
-        self.V[0xF] = 0;
+        V[0xF] = 0;
         var i: usize = 0;
         while (i < height) : (i += 1) {
             const offset = 8 * i;
@@ -309,8 +330,8 @@ pub const Cpu = struct {
             // Flips from 1 to 0 happens when the mask and the number have 1s in the same position
             // So we apply a binary AND the check if there's any remaining ones. This can
             // be done by verifying if the number if larger than 0
-            self.V[0xF] |= @boolToInt((masks.left & display[pos_first]) != 0);
-            self.V[0xF] |= @boolToInt((masks.right & display[pos_second]) != 0);
+            V[0xF] |= @boolToInt((masks.left & display[pos_first]) != 0);
+            V[0xF] |= @boolToInt((masks.right & display[pos_second]) != 0);
 
             display[pos_first] ^= masks.left;
             display[pos_second] ^= masks.right;
@@ -329,7 +350,8 @@ pub const Cpu = struct {
     }
 
     pub fn skipIfPressed(self: *Self, register: u4) void {
-        const key = @intCast(u4, self.V[register]);
+        const V = self.registers();
+        const key = @intCast(u4, V[register]);
         if (self.keypad.isPressed(key)) {
             self.PC += 2;
         }
@@ -337,7 +359,8 @@ pub const Cpu = struct {
     }
 
     pub fn skipIfNotPressed(self: *Self, register: u4) void {
-        const key = @intCast(u4, self.V[register]);
+        const V = self.registers();
+        const key = @intCast(u4, V[register]);
         if (!self.keypad.isPressed(key)) {
             self.PC += 2;
         }
@@ -345,66 +368,77 @@ pub const Cpu = struct {
     }
 
     pub fn storeDelayTimer(self: *Self, register: u4) void {
-        self.V[register] = self.delay_timer.value;
+        const V = self.registers();
+        V[register] = self.delay_timer.value;
         self.PC += 2;
     }
 
     pub fn waitForKeypress(self: *Self, register: u4) void {
         const key = await async self.keypad.waitForKeypress();
-        self.V[register] = key;
+        const V = self.registers();
+        V[register] = key;
         self.PC += 2;
     }
 
     pub fn setDelayTimer(self: *Self, register: u4) void {
-        self.delay_timer.set(self.V[register]);
+        const V = self.registers();
+        self.delay_timer.set(V[register]);
         self.PC += 2;
     }
 
     pub fn setSoundTimer(self: *Self, register: u4) void {
-        var v = self.V[register];
+        const V = self.registers();
+        var val = V[register];
         // Setting the sound timer to values below 2 is supposed to be a NOOP
         // https://github.com/mattmikolay/chip-8/wiki/CHIP%E2%80%908-Technical-Reference#timers
-        if (v < 2) {
-            v = 0;
+        if (val < 2) {
+            val = 0;
         }
-        self.sound_timer.set(v);
+        self.sound_timer.set(val);
         self.PC += 2;
     }
 
     pub fn addToI(self: *Self, register: u4) void {
-        self.I += self.V[register];
+        const V = self.registers();
+        self.I += V[register];
         self.PC += 2;
     }
 
     pub fn setSprite(self: *Self, register: u4) void {
-        self.I = self.V[register] * 5;
+        const V = self.registers();
+        self.I = V[register] * 5;
         self.PC += 2;
     }
 
     pub fn setBcd(self: *Self, register: u4) void {
-        const v = self.V[register];
-        self.mem[self.I] = v / 100;
-        self.mem[self.I + 1] = @mod(v, 100) / 10;
-        self.mem[self.I + 2] = @mod(v, 10);
+        const V = self.registers();
+        const val = V[register];
+        self.mem[self.I] = val / 100;
+        self.mem[self.I + 1] = @mod(val, 100) / 10;
+        self.mem[self.I + 2] = @mod(val, 10);
         self.PC += 2;
     }
 
     // TODO: implement flag to switch to buggy spec
     pub fn dumpRegisters(self: *Self, register: u4) void {
+        const V = self.registers();
         var i: usize = 0;
-        while (i <= register) : (i += 1) {
-            self.mem[self.I + i] = self.V[i];
+        while (i <= register) {
+            self.mem[self.I] = V[i];
+            i += 1;
+            self.I += 1;
         }
-        self.I += register + 1;
         self.PC += 2;
     }
 
     pub fn restoreRegisters(self: *Self, register: u4) void {
+        const V = self.registers();
         var i: usize = 0;
-        while (i <= register) : (i += 1) {
-            self.V[i] = self.mem[self.I + i];
+        while (i <= register) {
+            V[i] = self.mem[self.I];
+            i += 1;
+            self.I += 1;
         }
-        self.I += register + 1;
         self.PC += 2;
     }
 };
@@ -488,8 +522,9 @@ test "Cpu calls subroutine (2NNN)" {
 
 test "Cpu skips next instruction if VX equals literal (3XNN)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0xA] = 0xFF;
+    V[0xA] = 0xFF;
 
     cpu.skipIfEqualLiteral(0xA, 0xFF);
     try expect(cpu.PC == 0x204);
@@ -500,8 +535,9 @@ test "Cpu skips next instruction if VX equals literal (3XNN)" {
 
 test "Cpu skips next instruction if VX not equals literal (4XNN)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0xA] = 0xFF;
+    V[0xA] = 0xFF;
 
     cpu.skipIfNotEqualLiteral(0xA, 0xBC);
     try expect(cpu.PC == 0x204);
@@ -512,14 +548,15 @@ test "Cpu skips next instruction if VX not equals literal (4XNN)" {
 
 test "Cpu skips next instruction if VX equals VY (5XY0)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0xA] = 0xFF;
-    cpu.V[0xB] = 0xFF;
+    V[0xA] = 0xFF;
+    V[0xB] = 0xFF;
 
     cpu.skipIfEqual(0xA, 0xB);
     try expect(cpu.PC == 0x204);
 
-    cpu.V[0xB] = 0x21;
+    V[0xB] = 0x21;
 
     cpu.skipIfEqual(0xA, 0xB);
     try expect(cpu.PC == 0x206);
@@ -527,184 +564,199 @@ test "Cpu skips next instruction if VX equals VY (5XY0)" {
 
 test "Cpu stores literal into register (6XNN)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
     cpu.storeLiteral(0xA, 0xFF);
-    try expect(cpu.V[0xA] == 0xFF);
+    try expect(V[0xA] == 0xFF);
     try expect(cpu.PC == 0x202);
 
     cpu.storeLiteral(0xC, 0xCC);
-    try expect(cpu.V[0xC] == 0xCC);
+    try expect(V[0xC] == 0xCC);
     try expect(cpu.PC == 0x204);
 }
 
 test "Cpu adds literal into register (7XNN)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
     cpu.addLiteral(0xA, 0xFA);
-    try expect(cpu.V[0xA] == 0xFA);
+    try expect(V[0xA] == 0xFA);
     try expect(cpu.PC == 0x202);
 
     // Overflows
     cpu.addLiteral(0xA, 0x06);
-    try expect(cpu.V[0xA] == 0x00);
+    try expect(V[0xA] == 0x00);
     try expect(cpu.PC == 0x204);
 }
 
 test "Cpu stores value from VY into VX (8XY0)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0xB] = 0xBB;
+    V[0xB] = 0xBB;
 
     cpu.store(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0xBB);
+    try expect(V[0xA] == 0xBB);
     try expect(cpu.PC == 0x202);
 }
 
 test "Cpu bitwise ORs VX and VY (8XY1)" {
     var cpu = getTestCpu();
-    cpu.V[0xA] = 0b0110;
-    cpu.V[0xB] = 0b1001;
+    const V = cpu.registers();
+
+    V[0xA] = 0b0110;
+    V[0xB] = 0b1001;
     cpu.bitwiseOr(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0b1111);
+    try expect(V[0xA] == 0b1111);
     try expect(cpu.PC == 0x202);
 }
 
 test "Cpu bitwise ANDs VX and VY (8XY2)" {
     var cpu = getTestCpu();
-    cpu.V[0xA] = 0b0110;
-    cpu.V[0xB] = 0b1001;
+    const V = cpu.registers();
+
+    V[0xA] = 0b0110;
+    V[0xB] = 0b1001;
     cpu.bitwiseAnd(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0b0000);
+    try expect(V[0xA] == 0b0000);
     try expect(cpu.PC == 0x202);
 }
 
 test "Cpu bitwise XORs VX and VY (8XY3)" {
     var cpu = getTestCpu();
-    cpu.V[0xA] = 0b1010;
-    cpu.V[0xB] = 0b1001;
+    const V = cpu.registers();
+
+    V[0xA] = 0b1010;
+    V[0xB] = 0b1001;
     cpu.bitwiseXor(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0b0011);
+    try expect(V[0xA] == 0b0011);
     try expect(cpu.PC == 0x202);
 }
 
 test "Cpu adds registers VX and VY and sets VF if overflow (8XY4)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0xA] = 0xF0;
-    cpu.V[0xB] = 0x0A;
+    V[0xA] = 0xF0;
+    V[0xB] = 0x0A;
 
     cpu.add(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0xFA);
-    try expect(cpu.V[0xF] == 0);
+    try expect(V[0xA] == 0xFA);
+    try expect(V[0xF] == 0);
     try expect(cpu.PC == 0x202);
 
     cpu.add(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0x04);
-    try expect(cpu.V[0xF] == 1);
+    try expect(V[0xA] == 0x04);
+    try expect(V[0xF] == 1);
     try expect(cpu.PC == 0x204);
 
     cpu.add(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0xE);
-    try expect(cpu.V[0xF] == 0);
+    try expect(V[0xA] == 0xE);
+    try expect(V[0xF] == 0);
     try expect(cpu.PC == 0x206);
 }
 
 test "Cpu subs registers VX and VY and sets VF if no underflow (8XY5)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0xA] = 0x0F;
-    cpu.V[0xB] = 0x09;
+    V[0xA] = 0x0F;
+    V[0xB] = 0x09;
 
     cpu.sub(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0x06);
-    try expect(cpu.V[0xF] == 1);
+    try expect(V[0xA] == 0x06);
+    try expect(V[0xF] == 1);
     try expect(cpu.PC == 0x202);
 
     cpu.sub(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0xFD);
-    try expect(cpu.V[0xF] == 0);
+    try expect(V[0xA] == 0xFD);
+    try expect(V[0xF] == 0);
     try expect(cpu.PC == 0x204);
 
     cpu.sub(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0xF4);
-    try expect(cpu.V[0xF] == 1);
+    try expect(V[0xA] == 0xF4);
+    try expect(V[0xF] == 1);
     try expect(cpu.PC == 0x206);
 }
 
 test "Cpu right shifts VY into VX and sets VF to the LSB (8XY6)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0xA] = 0;
-    cpu.V[0xB] = 0b1101;
+    V[0xA] = 0;
+    V[0xB] = 0b1101;
 
     cpu.shiftRight(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0b0110);
-    try expect(cpu.V[0xB] == 0b1101);
-    try expect(cpu.V[0xF] == 1);
+    try expect(V[0xA] == 0b0110);
+    try expect(V[0xB] == 0b1101);
+    try expect(V[0xF] == 1);
     try expect(cpu.PC == 0x202);
 
-    cpu.V[0xB] = 0b0010;
+    V[0xB] = 0b0010;
     cpu.shiftRight(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0b0001);
-    try expect(cpu.V[0xB] == 0b0010);
-    try expect(cpu.V[0xF] == 0);
+    try expect(V[0xA] == 0b0001);
+    try expect(V[0xB] == 0b0010);
+    try expect(V[0xF] == 0);
     try expect(cpu.PC == 0x204);
 }
 
 test "Cpu sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0xA] = 0x09;
-    cpu.V[0xB] = 0x0A;
+    V[0xA] = 0x09;
+    V[0xB] = 0x0A;
 
     cpu.subStore(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0x01);
-    try expect(cpu.V[0xF] == 1);
+    try expect(V[0xA] == 0x01);
+    try expect(V[0xF] == 1);
     try expect(cpu.PC == 0x202);
 
-    cpu.V[0xA] = 0xC;
+    V[0xA] = 0xC;
     cpu.subStore(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0xFE);
-    try expect(cpu.V[0xF] == 0);
+    try expect(V[0xA] == 0xFE);
+    try expect(V[0xF] == 0);
     try expect(cpu.PC == 0x204);
 
-    cpu.V[0xA] = 0x3;
+    V[0xA] = 0x3;
     cpu.subStore(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0x07);
-    try expect(cpu.V[0xF] == 1);
+    try expect(V[0xA] == 0x07);
+    try expect(V[0xF] == 1);
     try expect(cpu.PC == 0x206);
 }
 
 test "Cpu left shifts VY into VX and sets VF to the MSB (8XYE)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0xA] = 0;
-    cpu.V[0xB] = 0b11011111;
+    V[0xA] = 0;
+    V[0xB] = 0b11011111;
 
     cpu.shiftLeft(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0b10111110);
-    try expect(cpu.V[0xB] == 0b11011111);
-    try expect(cpu.V[0xF] == 1);
+    try expect(V[0xA] == 0b10111110);
+    try expect(V[0xB] == 0b11011111);
+    try expect(V[0xF] == 1);
     try expect(cpu.PC == 0x202);
 
-    cpu.V[0xB] = 0b00101111;
+    V[0xB] = 0b00101111;
     cpu.shiftLeft(0xA, 0xB);
-    try expect(cpu.V[0xA] == 0b01011110);
-    try expect(cpu.V[0xB] == 0b00101111);
-    try expect(cpu.V[0xF] == 0);
+    try expect(V[0xA] == 0b01011110);
+    try expect(V[0xB] == 0b00101111);
+    try expect(V[0xF] == 0);
     try expect(cpu.PC == 0x204);
 }
 
 test "Cpu skips if not equal register (9XY0)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0xA] = 0x5;
-    cpu.V[0xB] = 0xA;
+    V[0xA] = 0x5;
+    V[0xB] = 0xA;
 
     cpu.skipIfNotEqual(0xA, 0xB);
     try expect(cpu.PC == 0x204);
 
-    cpu.V[0xB] = 0x5;
+    V[0xB] = 0x5;
     cpu.skipIfNotEqual(0xA, 0xB);
     try expect(cpu.PC == 0x206);
 }
@@ -719,8 +771,9 @@ test "Cpu stores memory address into I (ANNN)" {
 
 test "Cpu jumps to NNN plus V0 (BNNN)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0] = 0x10;
+    V[0] = 0x10;
 
     cpu.jumpWithOffset(0x400);
     try expect(cpu.PC == 0x410);
@@ -729,9 +782,10 @@ test "Cpu jumps to NNN plus V0 (BNNN)" {
 test "Cpu sets VX to a random number with mask (CXNN)" {
     // Wtih seed 0, the first number is 223 = 0b11011111
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
     cpu.genRandom(0xA, 0b11110000);
-    try expect(cpu.V[0xA] == 0b11010000);
+    try expect(V[0xA] == 0b11010000);
     try expect(cpu.PC == 0x202);
 }
 
@@ -854,17 +908,18 @@ test "Cpu draws sprite (DXYN)" {
 
 test "Cpu sets VF if drawing erases any pixels" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
     cpu.I = 0;
-    cpu.V[0xF] = 1;
+    V[0xF] = 1;
 
     // Draw unsets VF if no collisions happen
     cpu.draw(0, 0, 5);
-    try expect(cpu.V[0xF] == 0);
+    try expect(V[0xF] == 0);
 
     // Draw sets VF since a collision happened
     cpu.draw(0, 4, 5);
-    try expect(cpu.V[0xF] == 1);
+    try expect(V[0xF] == 1);
 }
 
 test "splitMask helper splits masks correctly" {
@@ -883,49 +938,53 @@ test "splitMask helper splits masks correctly" {
 
 test "Cpu skips next instruction if key in VX is pressed (EX9E)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
     test_keypad.pressKey(7);
 
-    cpu.V[0xA] = 7;
+    V[0xA] = 7;
     cpu.skipIfPressed(0xA);
     try expect(cpu.PC == 0x204);
 
-    cpu.V[0xA] = 8;
+    V[0xA] = 8;
     cpu.skipIfPressed(0xA);
     try expect(cpu.PC == 0x206);
 }
 
 test "Cpu skips next instruction f key in VX is not pressed (EXA1)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
     test_keypad.pressKey(7);
 
-    cpu.V[0xA] = 7;
+    V[0xA] = 7;
     cpu.skipIfNotPressed(0xA);
     try expect(cpu.PC == 0x202);
 
-    cpu.V[0xA] = 8;
+    V[0xA] = 8;
     cpu.skipIfNotPressed(0xA);
     try expect(cpu.PC == 0x206);
 }
 
 test "Cpu stores the value of the delay timer in VX (FX07)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
     cpu.delay_timer.value = 10;
     cpu.storeDelayTimer(0xA);
-    try expect(cpu.V[0xA] == 10);
+    try expect(V[0xA] == 10);
     try expect(cpu.PC == 0x202);
 }
 
 test "Cpu waits for keypress and stores result in VX (FX0A)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
     var frame = async cpu.waitForKeypress(0xA);
     cpu.keypad.pressKey(5);
     cpu.keypad.releaseKey(5);
     nosuspend await frame;
-    try expect(cpu.V[0xA] == 5);
+    try expect(V[0xA] == 5);
     try expect(cpu.PC == 0x202);
 
     frame = async cpu.waitForKeypress(0xC);
@@ -935,14 +994,15 @@ test "Cpu waits for keypress and stores result in VX (FX0A)" {
     cpu.keypad.releaseKey(6);
     nosuspend await frame;
 
-    try expect(cpu.V[0xC] == 6);
+    try expect(V[0xC] == 6);
     try expect(cpu.PC == 0x204);
 }
 
 test "Cpu sets delay timer to value found in VX (FX15)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0xA] = 10;
+    V[0xA] = 10;
     cpu.setDelayTimer(0xA);
     try expect(cpu.delay_timer.value == 10);
     try expect(cpu.PC == 0x202);
@@ -950,14 +1010,15 @@ test "Cpu sets delay timer to value found in VX (FX15)" {
 
 test "Cpu sets sound timer to value found in VX (FX18)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0xA] = 10;
+    V[0xA] = 10;
     cpu.setSoundTimer(0xA);
     try expect(cpu.sound_timer.value == 10);
     try expect(cpu.PC == 0x202);
 
     // Setting the sound timer to values below 2 has no effect
-    cpu.V[0xA] = 1;
+    V[0xA] = 1;
     cpu.setSoundTimer(0xA);
     try expect(cpu.sound_timer.value == 0);
     try expect(cpu.PC == 0x204);
@@ -965,7 +1026,9 @@ test "Cpu sets sound timer to value found in VX (FX18)" {
 
 test "Cpu adds the value from VX into I (FX1E)" {
     var cpu = getTestCpu();
-    cpu.V[0xA] = 5;
+    const V = cpu.registers();
+
+    V[0xA] = 5;
     cpu.I = 10;
 
     cpu.addToI(0xA);
@@ -975,8 +1038,9 @@ test "Cpu adds the value from VX into I (FX1E)" {
 
 test "Cpu sets I to sprite found in VX (FX29)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
-    cpu.V[0xA] = 5;
+    V[0xA] = 5;
     cpu.setSprite(0xA);
     try expect(cpu.I == 25);
     try expect(cpu.PC == 0x202);
@@ -984,7 +1048,9 @@ test "Cpu sets I to sprite found in VX (FX29)" {
 
 test "Cpu stores BCD of value in VX at I (FX33)" {
     var cpu = getTestCpu();
-    cpu.V[0xA] = 123;
+    const V = cpu.registers();
+
+    V[0xA] = 123;
     cpu.I = 0x500;
 
     cpu.setBcd(0xA);
@@ -997,10 +1063,11 @@ test "Cpu stores BCD of value in VX at I (FX33)" {
 
 test "Cpu dumps register into memory I (FX55)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
     var i: usize = 0;
     while (i < 16) : (i += 1) {
-        cpu.V[i] = @intCast(u8, i);
+        V[i] = @intCast(u8, i);
     }
 
     cpu.I = 0x500;
@@ -1021,6 +1088,7 @@ test "Cpu dumps register into memory I (FX55)" {
 
 test "Cpu restores registers from memory I (FX65)" {
     var cpu = getTestCpu();
+    const V = cpu.registers();
 
     var i: usize = 0;
     while (i < 16) : (i += 1) {
@@ -1032,9 +1100,9 @@ test "Cpu restores registers from memory I (FX65)" {
 
     while (i < 16) : (i += 1) {
         if (i <= 5) {
-            try expect(cpu.V[i] == @intCast(u8, i));
+            try expect(V[i] == @intCast(u8, i));
         } else {
-            try expect(cpu.V[i] == 0);
+            try expect(V[i] == 0);
         }
     }
 
