@@ -330,6 +330,15 @@ pub const Cpu = struct {
         self.I += register + 1;
         self.PC += 2;
     }
+
+    pub fn restoreRegisters(self: *Self, register: u4) void {
+        var i: usize = 0;
+        while (i <= register) : (i += 1) {
+            self.V[i] = self.mem[self.I + i];
+        }
+        self.I += register + 1;
+        self.PC += 2;
+    }
 };
 
 // Tests
@@ -943,6 +952,29 @@ test "Cpu dumps register into memory I (FX55)" {
             try expect(cpu.mem[0x500 + i] == @intCast(u8, i));
         } else {
             try expect(cpu.mem[0x500 + i] == 0);
+        }
+    }
+
+    try expect(cpu.I == 0x500 + 5 + 1);
+    try expect(cpu.PC == 0x202);
+}
+
+test "Cpu restores registers from memory I (FX65)" {
+    var cpu = getTestCpu();
+
+    var i: usize = 0;
+    while (i < 16) : (i += 1) {
+        cpu.mem[0x500 + i] = @intCast(u8, i);
+    }
+
+    cpu.I = 0x500;
+    cpu.restoreRegisters(5);
+
+    while (i < 16) : (i += 1) {
+        if (i <= 5) {
+            try expect(cpu.V[i] == @intCast(u8, i));
+        } else {
+            try expect(cpu.V[i] == 0);
         }
     }
 
