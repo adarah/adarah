@@ -74,6 +74,8 @@ var global_frame: @Frame(Cpu.fetchDecodeExecute) = undefined;
 export fn onAnimationFrame(now_time_ms: c_int) void {
     const elapsed = now_time_ms - prev_time_ms;
     const num_instructions = @divFloor(elapsed * cpu_clock_frequency_hz, 1000);
+    const display = cpu.display_buffer();
+    wasm.draw(display, display.len);
 
     // Due to intentional imprecisions in the timer functions in the browser,
     // sometimes now is smaller than previous. Even if the time elapsed is positive,
@@ -89,8 +91,8 @@ export fn onAnimationFrame(now_time_ms: c_int) void {
         global_frame = async cpu.fetchDecodeExecute();
     }
     wasm.log("Executed all", .{});
-    const display = cpu.display_buffer();
-    wasm.draw(display, display.len);
+    // const display = cpu.display_buffer();
+    // wasm.draw(display, display.len);
     wasm.log("Finished drawing", .{});
 }
 

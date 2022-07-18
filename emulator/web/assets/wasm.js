@@ -1,3 +1,5 @@
+'use strict';
+
 function consoleLog(location, size) {
   const buffer = new Uint8Array(instance.exports.memory.buffer, location, size);
   const decoder = new TextDecoder();
@@ -16,10 +18,46 @@ function getRandomSeed() {
   return Math.floor(Math.random() * 2147483647);
 }
 
+const TOP_LEFT_X = 10;
+const TOP_LEFT_Y = 10;
+
+const PIXEL_SIZE = 5;
+
+function* pixelPos() {
+  for (let y = 0; y < 32; y++) {
+    for (let x = 0; x < 64; x++) {
+      yield [x, y];
+    }
+  }
+}
+
+function* bitsOf(num) {
+    for (let i = 7; i >= 0; i--) {
+      const masked = num & (1 << i);
+      yield masked ? 1 : 0;
+    }
+}
+
+
 const canvas = document.getElementById("emulator-screen");
+const ctx = canvas.getContext('2d');
 function draw(location, size) {
   const buffer = new Uint8Array(instance.exports.memory.buffer, location, size);
-  console.log(buffer);
+  const pos = pixelPos();
+
+  for(let _byte of buffer.values()) {
+    console.log(_byte.toString(2));
+    for (let bit of bitsOf(_byte)) {
+      const [x, y] = pos.next().value;
+
+      console.log(x, y);
+      console.log(bit);
+      ctx.fillStyle = bit === 1 ? 'white' : 'black';
+      const pixelX = TOP_LEFT_X + PIXEL_SIZE * x;
+      const pixelY = TOP_LEFT_Y + PIXEL_SIZE * y;
+      ctx.fillRect(pixelX, pixelY, pixelX + PIXEL_SIZE, pixelY + PIXEL_SIZE);
+    }
+  }
 }
 
 const imports = {
