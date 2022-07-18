@@ -113,7 +113,7 @@ pub const Cpu = struct {
                     6 => self.shiftRight(b, c),
                     7 => self.subStore(b, c),
                     0xE => self.shiftLeft(b, c),
-                    else => unreachable,
+                    else => panic("unknown instruction: {}", .{fmt.fmtSliceHexUpper(self.mem[self.PC .. self.PC + 2])}),
                 }
             },
             9 => self.skipIfNotEqual(b, c),
@@ -125,7 +125,7 @@ pub const Cpu = struct {
                 switch (second) {
                     0x9E => self.skipIfPressed(b),
                     0xA1 => self.skipIfNotPressed(b),
-                    else => unreachable,
+                    else => panic("unknown instruction: {}", .{fmt.fmtSliceHexUpper(self.mem[self.PC .. self.PC + 2])}),
                 }
             },
             0xF => {
@@ -139,7 +139,7 @@ pub const Cpu = struct {
                     0x33 => self.setBcd(b),
                     0x55 => self.dumpRegisters(b),
                     0x65 => self.restoreRegisters(b),
-                    else => unreachable,
+                    else => panic("unknown instruction: {}", .{fmt.fmtSliceHexUpper(self.mem[self.PC .. self.PC + 2])}),
                 }
             },
         }

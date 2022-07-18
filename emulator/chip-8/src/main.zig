@@ -4,12 +4,12 @@ const wasm = @import("./wasm.zig");
 const util = @import("./util.zig");
 const c = @import("./consts.zig");
 const Cpu = @import("./cpu.zig").Cpu;
+const Loader = @import("./loader.zig").Loader;
 const Keypad = @import("./keypad.zig").Keypad;
 const Timer = @import("./timer.zig").Timer;
 const fmt = std.fmt;
 const testing = std.testing;
 
-var mem: Memory = undefined;
 var cpu: Cpu = undefined;
 var keypad: Keypad = undefined;
 var sound_timer: Timer = undefined;
@@ -33,6 +33,8 @@ pub fn panic(message: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
 
 export fn init(clock_speed_hz: c_int, start_time_ms: c_int) void {
     const seed = @intCast(u64, wasm.getRandomSeed());
+    var mem: [4096]u8 = std.mem.zeroes([4096]u8);
+    Loader.loadFonts(&mem);
     keypad = Keypad.init();
     sound_timer = Timer.init(0);
     delay_timer = Timer.init(0);
@@ -40,6 +42,7 @@ export fn init(clock_speed_hz: c_int, start_time_ms: c_int) void {
     prev_time_ms = start_time_ms;
     cpu = Cpu.init(.{
         .seed = seed,
+        .memory = mem,
         .keypad = &keypad,
         .sound_timer = &sound_timer,
         .delay_timer = &delay_timer,
@@ -81,8 +84,8 @@ export fn onAnimationFrame(now_time_ms: c_int) void {
         global_frame = async cpu.fetchDecodeExecute();
     }
     wasm.log("Executed all", .{});
-    const screen = cpu.screen();
-    wasm.draw(screen, screen.len);
+    const display = cpu.display_buffer();
+    wasm.draw(display, display.len);
     wasm.log("Finished drawing", .{});
 }
 
