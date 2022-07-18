@@ -35,6 +35,7 @@ pub const Cpu = struct {
 
     pub fn init(options: CpuOptions) Self {
         // Bytes 0x00 trough 0x1FF are reserved for the interpreter, so we store the fonts here.
+        // TODO: Place fonts in the correct memory position in case any ROM abuses that data somehow
         var mem = [0x50]u8{
             0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
             0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -307,8 +308,16 @@ pub const Cpu = struct {
         self.PC += 2;
     }
 
-    pub fn setSprite(self: *Self, register: u8) void {
+    pub fn setSprite(self: *Self, register: u4) void {
         self.I = self.V[register] * 5;
+        self.PC += 2;
+    }
+
+    pub fn setBcd(self: *Self, register: u4) void {
+        const v = self.V[register];
+        self.mem[self.I] = v / 100;
+        self.mem[self.I + 1] = @mod(v, 100) / 10;
+        self.mem[self.I + 2] = @mod(v, 10);
         self.PC += 2;
     }
 };
@@ -891,5 +900,18 @@ test "Cpu sets I to sprite found in VX (FX29)" {
     cpu.V[0xA] = 5;
     cpu.setSprite(0xA);
     try expect(cpu.I == 25);
+    try expect(cpu.PC == 0x202);
+}
+
+test "stored BCD of value in VX at I (FX33)" {
+    var cpu = getTestCpu();
+    cpu.V[0xA] = 123;
+    cpu.I = 0x500;
+
+    cpu.setBcd(0xA);
+
+    try expect(cpu.mem[0x500] == 1);
+    try expect(cpu.mem[0x501] == 2);
+    try expect(cpu.mem[0x502] == 3);
     try expect(cpu.PC == 0x202);
 }
