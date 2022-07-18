@@ -321,11 +321,13 @@ pub const Cpu = struct {
         self.PC += 2;
     }
 
+    // TODO: implement flag to switch to buggy spec
     pub fn dumpRegisters(self: *Self, register: u4) void {
         var i: usize = 0;
         while (i < register) : (i += 1) {
             self.mem[self.I + i] = self.V[i];
         }
+        self.I += register + 1;
         self.PC += 2;
     }
 };
@@ -944,5 +946,6 @@ test "Cpu dumps register into memory I (FX55)" {
         }
     }
 
+    try expect(cpu.I == 0x500 + 5 + 1);
     try expect(cpu.PC == 0x202);
 }
