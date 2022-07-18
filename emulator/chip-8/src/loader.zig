@@ -5,7 +5,7 @@ pub const Loader = struct {
     // Since we are restricted to the 4096 bytes of the interpreter, and modern emulators
     // don't require the reserved 512 bytes in the beginning of the buffer, we just store
     // the fonts at address 0.
-    const fonts: [0x50]u8 = [_]u8{
+    const FONTS: [0x50]u8 = [_]u8{
         0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
         0x20, 0x60, 0x20, 0x20, 0x70, // 1
         0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
@@ -24,8 +24,16 @@ pub const Loader = struct {
         0xF0, 0x80, 0xF0, 0x80, 0x80, // F
     };
 
+    const GAME_START_ADDRESS = 0x200;
+
     pub fn loadFonts(buf: []u8) void {
-        std.mem.copy(u8, buf, Loader.fonts[0..]);
+        std.mem.copy(u8, buf, &Loader.FONTS);
+    }
+
+    pub fn loadGame(buf: []u8, game: []u8) void {
+        for (game) |b, i| {
+            buf[GAME_START_ADDRESS + i] = b;
+        }
     }
 };
 
@@ -49,4 +57,17 @@ test "Loader loads fonts" {
     }
 }
 
-test "Loader loads game" {}
+test "Loader loads game" {
+    var mem = getTestMemory();
+
+    var game: [256]u8 = undefined;
+    for (game) |*b, i| {
+        b.* = @truncate(u8, i);
+    }
+    Loader.loadGame(&mem, &game);
+
+    var i: usize = 0;
+    while (i < game.len) : (i += 1) {
+        try expect(mem[0x200 + i] == i);
+    }
+}

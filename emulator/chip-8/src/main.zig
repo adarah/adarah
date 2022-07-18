@@ -18,7 +18,7 @@ var delay_timer: Timer = undefined;
 var cpu_clock_speed_hz: c_int = undefined;
 var prev_time_ms: c_int = undefined;
 
-// This is the panic handler. Use util.panic for easier cdebugonvenience.
+// This is the panic handler. Use util.panic for better convenience.
 pub fn panic(message: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
     @setCold(true);
     if (builtin.os.tag == .freestanding) {
@@ -77,6 +77,7 @@ export fn onAnimationFrame(now_time_ms: c_int) void {
     if (num_instructions <= 0) {
         return;
     }
+    prev_time_ms = now_time_ms;
 
     wasm.log("Instructions to execute {d}", .{num_instructions});
     var i: usize = 0;
