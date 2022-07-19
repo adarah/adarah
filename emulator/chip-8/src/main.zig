@@ -45,10 +45,6 @@ export fn init(seed: c_uint, start_time: c_int, clock_frequency_hz: c_int, shift
 
 export fn onKeydown(keycode: c_int) void {
     const key = util.keycodeToKeypad(keycode) catch return;
-    // As noted in the source below, the subroutine to get keyboard input should set the sound timer to 4,
-    // which essentially makes the emulator play a sound while the key is being held down
-    // https://laurencescotford.com/chip-8-on-the-cosmac-vip-keyboard-input/
-    sound_timer.set(4);
     keypad.pressKey(key);
     std.log.debug("Pressed {}!", .{key});
 }

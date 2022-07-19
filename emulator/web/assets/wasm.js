@@ -77,7 +77,7 @@ const imports = {
     },
 }
 
-const gameRes = await fetch('/static/games/TETRIS');
+const gameRes = await fetch('/static/games/INVADERS');
 const buffer = new Uint8Array(await gameRes.arrayBuffer());
 
 const obj = await WebAssembly.instantiateStreaming(fetch('/static/chip-8.wasm'), imports)
