@@ -1,10 +1,5 @@
 const std = @import("std");
-const wasm = @import("./wasm.zig");
-const fmt = std.fmt;
 const StaticBitSet = std.bit_set.StaticBitSet;
-
-var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-const allocator = gpa.allocator();
 
 // A chip-8 keypad is a 16 key square, and each key correspond to a hexadecimal value
 // ╔═══╦═══╦═══╦═══╗
@@ -37,10 +32,6 @@ pub const Keypad = struct {
 
     pub fn pressKey(self: *Self, key: u4) void {
         self.keys.set(key);
-
-        // const msg = fmt.allocPrint(allocator, "pressed {d}", .{key}) catch "err";
-        // defer allocator.free(msg);
-        // wasm.consoleLog(msg.ptr, @intCast(c_uint, msg.len));
     }
 
     pub fn releaseKey(self: *Self, key: u4) void {
@@ -58,11 +49,6 @@ pub const Keypad = struct {
         self.wait_frame = @frame();
         // Gets resumed by the `releaseKey` method
         suspend {}
-
-        const msg = fmt.allocPrint(allocator, "Actually resumed for real!", .{}) catch "err";
-        defer allocator.free(msg);
-        // wasm.consoleLog(msg.ptr, msg.len);
-
         return self.wait_res;
     }
 };

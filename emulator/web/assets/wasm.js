@@ -71,8 +71,7 @@ const imports = {
     },
 }
 
-// const gameRes = await fetch('/static/games/test_ROMs/c8_test.ch8');
-const gameRes = await fetch('/static/games/PONG2');
+const gameRes = await fetch('/static/games/TETRIS');
 const buffer = new Uint8Array(await gameRes.arrayBuffer());
 
 const obj = await WebAssembly.instantiateStreaming(fetch('/static/chip-8.wasm'), imports)
