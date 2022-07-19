@@ -85,17 +85,26 @@ export fn timerTick() void {
     }
 }
 
+// Functions used by the debugger
+
 export fn debugStep() void {
     global_frame = async cpu.fetchDecodeExecute();
 
     const V = cpu.registers();
-    wasm.setRegisters(cpu.PC, V, V.len);
+    wasm.setRegisters(cpu.PC, cpu.SP, cpu.I, V, V.len);
 
     const s = cpu.stack();
-    wasm.setStack(cpu.SP, s, s.len);
+    wasm.setStack(s, s.len);
 
     const display = cpu.display_buffer();
     wasm.draw(display, display.len);
+}
+
+export fn debugSetState(pc: c_uint, sp: c_uint, i_reg: c_uint, memory: [*]const u8) void {
+    cpu.PC = @intCast(u16, pc);
+    cpu.SP = @intCast(u16, sp);
+    cpu.I = @intCast(u16, i_reg);
+    std.mem.copy(u8, &cpu.mem, memory[0..4096]);
 }
 
 // This is the panic handler. Use util.panic for better convenience.

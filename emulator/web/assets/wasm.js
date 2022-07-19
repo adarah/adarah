@@ -36,7 +36,7 @@ function draw(location, size) {
   canvasDraw(buffer);
 }
 
-function setStack(SP, location, size) {
+function setStack(location, size) {
   const stack = document.getElementById("stack");
 
   const buffer = new Uint8Array(instance.exports.memory.buffer, location, size);
@@ -47,7 +47,7 @@ function setStack(SP, location, size) {
   stack.innerText = msg;
 }
 
-function setRegisters(PC, location, size) {
+function setRegisters(PC, SP, I, location, size) {
   const registers = document.getElementById("registers");
 
   const buffer = new Uint8Array(instance.exports.memory.buffer, location, size);

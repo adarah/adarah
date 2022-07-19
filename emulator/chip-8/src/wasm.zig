@@ -7,8 +7,8 @@ pub extern fn consoleError(message: [*]const u8, length: usize) void;
 
 pub extern fn draw(screen_buffer: [*]const u8, length: usize) void;
 pub extern fn playAudio() void;
-pub extern fn setStack(sp: u16, stack_buffer: [*]const u8, length: usize) void;
-pub extern fn setRegisters(pc: u16, register_buffer: [*]const u8, length: usize) void;
+pub extern fn setStack(stack_buffer: [*]const u8, length: usize) void;
+pub extern fn setRegisters(pc: c_uint, sp: c_uint, i_reg: c_uint, register_buffer: [*]const u8, length: usize) void;
 
 pub fn debug(comptime fmt: []const u8, args: anytype) void {
     var buf: [512]u8 = undefined;
