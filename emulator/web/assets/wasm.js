@@ -58,6 +58,10 @@ function setRegisters(PC, SP, I, location, size) {
   registers.innerText = msg;
 }
 
+function setMem(location, size) {
+  const buffer = new Uint8Array(instance.exports.memory.buffer, location, size);
+}
+
 const audio = new Audio('/static/sounds_select.wav');
 function playAudio() {
   audio.play();
@@ -74,6 +78,7 @@ const imports = {
       playAudio,
       setStack,
       setRegisters,
+      setMem,
     },
 }
 

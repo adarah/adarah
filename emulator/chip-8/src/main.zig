@@ -96,6 +96,8 @@ export fn debugStep() void {
     const s = cpu.stack();
     wasm.setStack(s, s.len);
 
+    wasm.setMem(&cpu.mem, cpu.mem.len);
+
     const display = cpu.display_buffer();
     wasm.draw(display, display.len);
 }
