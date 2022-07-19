@@ -1,18 +1,31 @@
 import {draw as canvasDraw} from './canvas.js';
 
-function consoleLog(location, size) {
+function getString(location, size) {
   const buffer = new Uint8Array(instance.exports.memory.buffer, location, size);
   const decoder = new TextDecoder();
-  const string = decoder.decode(buffer);
-  console.log(string);
+  return decoder.decode(buffer);
+}
+
+function consoleDebug(location, size) {
+  const string = getString(location, size);
+  console.debug(string);
+}
+
+function consoleInfo(location, size) {
+  const string = getString(location, size);
+  console.info(string);
+}
+
+function consoleWarn(location, size) {
+  const string = getString(location, size);
+  console.warn(string);
 }
 
 function consoleError(location, size) {
-  const buffer = new Uint8Array(instance.exports.memory.buffer, location, size);
-  const decoder = new TextDecoder();
-  const string = decoder.decode(buffer);
+  const string = getString(location, size);
   console.error(string);
 }
+
 
 function getRandomSeed() {
   return Math.floor(Math.random() * 2147483647);
@@ -47,7 +60,9 @@ function setRegisters(PC, location, size) {
 
 const imports = {
     env: {
-      consoleLog,
+      consoleDebug,
+      consoleInfo,
+      consoleWarn,
       consoleError,
       getRandomSeed,
       draw,
@@ -56,8 +71,8 @@ const imports = {
     },
 }
 
-// const gameRes = await fetch('/static/games/test_ROMs/BC_test.ch8');
-const gameRes = await fetch('/static/games/TETRIS');
+// const gameRes = await fetch('/static/games/test_ROMs/c8_test.ch8');
+const gameRes = await fetch('/static/games/PONG2');
 const buffer = new Uint8Array(await gameRes.arrayBuffer());
 
 const obj = await WebAssembly.instantiateStreaming(fetch('/static/chip-8.wasm'), imports)
@@ -83,9 +98,9 @@ document.getElementById('step-button').addEventListener('click', () => {
   instance.exports.debugStep();
 });
 
-// const step = (now) => {
-//   instance.exports.onAnimationFrame(now);
-//   window.requestAnimationFrame(step);
-// }
-// window.requestAnimationFrame(step);
+const step = (now) => {
+  instance.exports.onAnimationFrame(now);
+  window.requestAnimationFrame(step);
+}
+window.requestAnimationFrame(step);
 

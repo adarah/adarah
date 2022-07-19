@@ -1,10 +1,9 @@
 const std = @import("std");
 const Keypad = @import("./keypad.zig").Keypad;
 const Timer = @import("./timer.zig").Timer;
-const wasm = @import("./wasm.zig");
+const panic = @import("./util.zig").panic;
 const fmt = std.fmt;
 const rand = std.rand;
-const panic = @import("./util.zig").panic;
 
 const CpuOptions = struct {
     memory: [4096]u8,
@@ -91,9 +90,11 @@ pub const Cpu = struct {
         const d: u4 = @truncate(u4, second);
 
         const nnn: u16 = @shlExact(@as(u16, b), 8) + second;
-        const instruction: [2]u8 = [_]u8{ first, second };
-        wasm.log("fetched {}", .{fmt.fmtSliceHexUpper(&instruction)});
-        // wasm.log("PC: {}", .{self.PC});
+        {
+            const instruction: [2]u8 = [_]u8{ first, second };
+            std.log.debug("fetched: {}", .{fmt.fmtSliceHexUpper(&instruction)});
+            std.log.debug("PC: {}", .{self.PC});
+        }
 
         switch (a) {
             0 => {
@@ -153,8 +154,6 @@ pub const Cpu = struct {
                 }
             },
         }
-
-        // wasm.log("PC: {}", .{self.PC});
     }
 
     // Instructions
@@ -395,7 +394,9 @@ pub const Cpu = struct {
     }
 
     pub fn waitForKeypress(self: *Self, register: u4) void {
+        std.log.debug("waiting for any key", .{});
         const key = await async self.keypad.waitForKeypress();
+        std.log.debug("got key! {}", .{key});
         const V = self.registers();
         V[register] = key;
         self.PC += 2;
@@ -927,10 +928,10 @@ test "Cpu draws sprite (DXYN)" {
     V[0xB] = 30;
     cpu.draw(0xA, 0xB, 5);
 
-    var i: usize = 0;
-    while (i < 32) : (i += 1) {
-        print("\n{b:0>8}", .{s[8 * i .. 8 * (i + 1)]});
-    }
+    // var i: usize = 0;
+    // while (i < 32) : (i += 1) {
+    //     print("\n{b:0>8}", .{s[8 * i .. 8 * (i + 1)]});
+    // }
 
     // 0xF0, 0x90, 0x90, 0x90, 0xF0 // 0
     try expect(s[0] == 0xF0);
