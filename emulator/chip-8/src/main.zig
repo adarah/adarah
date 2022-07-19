@@ -84,6 +84,9 @@ export fn onAnimationFrame(now_time_ms: c_int) void {
 export fn timerTick() void {
     sound_timer.tick();
     delay_timer.tick();
+    if (sound_timer.value > 0) {
+        wasm.playAudio();
+    }
 }
 
 export fn debugStep() void {

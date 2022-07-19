@@ -58,6 +58,11 @@ function setRegisters(PC, location, size) {
   registers.innerText = msg;
 }
 
+const audio = new Audio('/static/sounds_select.wav');
+function playAudio() {
+  audio.play();
+}
+
 const imports = {
     env: {
       consoleDebug,
@@ -66,6 +71,7 @@ const imports = {
       consoleError,
       getRandomSeed,
       draw,
+      playAudio,
       setStack,
       setRegisters,
     },
@@ -91,7 +97,7 @@ document.addEventListener('keyup', event => {
 });
 
 // Setup timers
-setInterval(() => instance.exports.timerTick(), 16.67)
+setInterval(() => instance.exports.timerTick(), 16.67);
 
 document.getElementById('step-button').addEventListener('click', () => {
   instance.exports.debugStep();
