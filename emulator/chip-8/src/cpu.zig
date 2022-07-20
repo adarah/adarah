@@ -159,9 +159,11 @@ pub const Cpu = struct {
     // Instructions
 
     pub fn syscall(self: *Self, code: u16) !void {
-        _ = self;
-        _ = code;
-        return error.NotImplemented;
+        switch (code) {
+            0x004B => {}, // This machine code subroutine just turns on the display, so we do't have to do anything
+            else => return error.NotImplemented,
+        }
+        self.PC += 2;
     }
 
     pub fn callSubroutine(self: *Self, address: u16) void {
@@ -473,13 +475,17 @@ const expectError = std.testing.expectError;
 const print = std.debug.print;
 const Loader = @import("./loader.zig").Loader;
 
+fn expectEqual(comptime T: type, expected: T, actual: T) !void {
+    try std.testing.expectEqual(expected, actual);
+}
+
 var test_keypad: Keypad = undefined;
 var test_sound_timer: Timer = undefined;
 var test_delay_timer: Timer = undefined;
 
 fn getTestCpu() Cpu {
     var memory: [4096]u8 = std.mem.zeroes([4096]u8);
-    Loader.loadFonts(&memory);
+    Loader.initMem(&memory);
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
@@ -488,6 +494,11 @@ fn getTestCpu() Cpu {
 
 test "Cpu makes syscall (0NNN)" {
     var cpu = getTestCpu();
+    print("\n{}", .{cpu.PC});
+    cpu.syscall(0x004B) catch |err| {
+        panic("expected this syscall call to be implemented, got {}", .{err});
+    };
+    try expectEqual(u16, 0x202, cpu.PC);
     try expectError(error.NotImplemented, cpu.syscall(0x300));
 }
 
@@ -499,9 +510,9 @@ test "Cpu clears screens (00E0)" {
 
     cpu.clearScreen();
     for (cpu.display_buffer()) |b| {
-        try expect(b == 0);
+        try expectEqual(u8, 0, b);
     }
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu returns from subroutine (00EE)" {
@@ -510,36 +521,36 @@ test "Cpu returns from subroutine (00EE)" {
     cpu.stackPush(0x800);
 
     cpu.returnFromSubroutine();
-    try expect(cpu.SP == 0xECD);
-    try expect(cpu.PC == 0x800);
+    try expectEqual(u16, 0xECD, cpu.SP);
+    try expectEqual(u16, 0x800, cpu.PC);
 
     cpu.returnFromSubroutine();
-    try expect(cpu.SP == 0xECF);
-    try expect(cpu.PC == 0x500);
+    try expectEqual(u16, 0xECF, cpu.SP);
+    try expectEqual(u16, 0x500, cpu.PC);
 }
 
 test "Cpu jumps to address (1NNN)" {
     var cpu = getTestCpu();
 
     cpu.jump(0x300);
-    try expect(cpu.PC == 0x300);
+    try expectEqual(u16, 0x300, cpu.PC);
 
     cpu.jump(0x500);
-    try expect(cpu.PC == 0x500);
+    try expectEqual(u16, 0x500, cpu.PC);
 }
 
 test "Cpu calls subroutine (2NNN)" {
     var cpu = getTestCpu();
 
     cpu.callSubroutine(0x300);
-    try expect(cpu.PC == 0x300);
-    try expect(cpu.SP == 0xECD);
-    try expect(cpu.stackPeek() == 0x202);
+    try expectEqual(u16, 0x300, cpu.PC);
+    try expectEqual(u16, 0xECD, cpu.SP);
+    try expectEqual(u16, 0x202, cpu.stackPeek());
 
     cpu.callSubroutine(0x500);
-    try expect(cpu.PC == 0x500);
-    try expect(cpu.SP == 0xECB);
-    try expect(cpu.stackPeek() == 0x302);
+    try expectEqual(u16, 0x500, cpu.PC);
+    try expectEqual(u16, 0xECB, cpu.SP);
+    try expectEqual(u16, 0x302, cpu.stackPeek());
 }
 
 test "Cpu skips next instruction if VX equals literal (3XNN)" {
@@ -549,10 +560,10 @@ test "Cpu skips next instruction if VX equals literal (3XNN)" {
     V[0xA] = 0xFF;
 
     cpu.skipIfEqualLiteral(0xA, 0xFF);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u16, 0x204, cpu.PC);
 
     cpu.skipIfEqualLiteral(0xA, 0xAB);
-    try expect(cpu.PC == 0x206);
+    try expectEqual(u16, 0x206, cpu.PC);
 }
 
 test "Cpu skips next instruction if VX not equals literal (4XNN)" {
@@ -562,10 +573,10 @@ test "Cpu skips next instruction if VX not equals literal (4XNN)" {
     V[0xA] = 0xFF;
 
     cpu.skipIfNotEqualLiteral(0xA, 0xBC);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u16, 0x204, cpu.PC);
 
     cpu.skipIfNotEqualLiteral(0xA, 0xFF);
-    try expect(cpu.PC == 0x206);
+    try expectEqual(u16, 0x206, cpu.PC);
 }
 
 test "Cpu skips next instruction if VX equals VY (5XY0)" {
@@ -576,12 +587,12 @@ test "Cpu skips next instruction if VX equals VY (5XY0)" {
     V[0xB] = 0xFF;
 
     cpu.skipIfEqual(0xA, 0xB);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u16, 0x204, cpu.PC);
 
     V[0xB] = 0x21;
 
     cpu.skipIfEqual(0xA, 0xB);
-    try expect(cpu.PC == 0x206);
+    try expectEqual(u16, 0x206, cpu.PC);
 }
 
 test "Cpu stores literal into register (6XNN)" {
@@ -589,12 +600,12 @@ test "Cpu stores literal into register (6XNN)" {
     const V = cpu.registers();
 
     cpu.storeLiteral(0xA, 0xFF);
-    try expect(V[0xA] == 0xFF);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0xFF, V[0xA]);
+    try expectEqual(u16, 0x202, cpu.PC);
 
     cpu.storeLiteral(0xC, 0xCC);
-    try expect(V[0xC] == 0xCC);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u8, 0xCC, V[0xC]);
+    try expectEqual(u16, 0x204, cpu.PC);
 }
 
 test "Cpu adds literal into register (7XNN)" {
@@ -602,13 +613,13 @@ test "Cpu adds literal into register (7XNN)" {
     const V = cpu.registers();
 
     cpu.addLiteral(0xA, 0xFA);
-    try expect(V[0xA] == 0xFA);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0xFA, V[0xA]);
+    try expectEqual(u16, 0x202, cpu.PC);
 
     // Overflows
     cpu.addLiteral(0xA, 0x06);
-    try expect(V[0xA] == 0x00);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u8, 0x00, V[0xA]);
+    try expectEqual(u16, 0x204, cpu.PC);
 }
 
 test "Cpu stores value from VY into VX (8XY0)" {
@@ -618,8 +629,8 @@ test "Cpu stores value from VY into VX (8XY0)" {
     V[0xB] = 0xBB;
 
     cpu.store(0xA, 0xB);
-    try expect(V[0xA] == 0xBB);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0xBB, V[0xA]);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu bitwise ORs VX and VY (8XY1)" {
@@ -629,8 +640,8 @@ test "Cpu bitwise ORs VX and VY (8XY1)" {
     V[0xA] = 0b0110;
     V[0xB] = 0b1001;
     cpu.bitwiseOr(0xA, 0xB);
-    try expect(V[0xA] == 0b1111);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0b1111, V[0xA]);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu bitwise ANDs VX and VY (8XY2)" {
@@ -640,8 +651,8 @@ test "Cpu bitwise ANDs VX and VY (8XY2)" {
     V[0xA] = 0b0110;
     V[0xB] = 0b1001;
     cpu.bitwiseAnd(0xA, 0xB);
-    try expect(V[0xA] == 0b0000);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0b0000, V[0xA]);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu bitwise XORs VX and VY (8XY3)" {
@@ -651,8 +662,8 @@ test "Cpu bitwise XORs VX and VY (8XY3)" {
     V[0xA] = 0b1010;
     V[0xB] = 0b1001;
     cpu.bitwiseXor(0xA, 0xB);
-    try expect(V[0xA] == 0b0011);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0b0011, V[0xA]);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu adds registers VX and VY and sets VF if overflow (8XY4)" {
@@ -663,19 +674,19 @@ test "Cpu adds registers VX and VY and sets VF if overflow (8XY4)" {
     V[0xB] = 0x0A;
 
     cpu.add(0xA, 0xB);
-    try expect(V[0xA] == 0xFA);
-    try expect(V[0xF] == 0);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0xFA, V[0xA]);
+    try expectEqual(u8, 0, V[0xF]);
+    try expectEqual(u16, 0x202, cpu.PC);
 
     cpu.add(0xA, 0xB);
-    try expect(V[0xA] == 0x04);
-    try expect(V[0xF] == 1);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u8, 0x04, V[0xA]);
+    try expectEqual(u8, 1, V[0xF]);
+    try expectEqual(u16, 0x204, cpu.PC);
 
     cpu.add(0xA, 0xB);
-    try expect(V[0xA] == 0xE);
-    try expect(V[0xF] == 0);
-    try expect(cpu.PC == 0x206);
+    try expectEqual(u8, 0xE, V[0xA]);
+    try expectEqual(u8, 0, V[0xF]);
+    try expectEqual(u16, 0x206, cpu.PC);
 }
 
 test "Cpu subs registers VX and VY and sets VF if no underflow (8XY5)" {
@@ -686,19 +697,19 @@ test "Cpu subs registers VX and VY and sets VF if no underflow (8XY5)" {
     V[0xB] = 0x09;
 
     cpu.sub(0xA, 0xB);
-    try expect(V[0xA] == 0x06);
-    try expect(V[0xF] == 1);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0x06, V[0xA]);
+    try expectEqual(u8, 1, V[0xF]);
+    try expectEqual(u16, 0x202, cpu.PC);
 
     cpu.sub(0xA, 0xB);
-    try expect(V[0xA] == 0xFD);
-    try expect(V[0xF] == 0);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u8, 0xFD, V[0xA]);
+    try expectEqual(u8, 0, V[0xF]);
+    try expectEqual(u16, 0x204, cpu.PC);
 
     cpu.sub(0xA, 0xB);
-    try expect(V[0xA] == 0xF4);
-    try expect(V[0xF] == 1);
-    try expect(cpu.PC == 0x206);
+    try expectEqual(u8, 0xF4, V[0xA]);
+    try expectEqual(u8, 1, V[0xF]);
+    try expectEqual(u16, 0x206, cpu.PC);
 }
 
 test "Cpu right shifts VY into VX and sets VF to the LSB (8XY6)" {
@@ -710,22 +721,22 @@ test "Cpu right shifts VY into VX and sets VF to the LSB (8XY6)" {
     V[0xB] = 0b1101;
 
     cpu.shiftRight(0xA, 0xB);
-    try expect(V[0xA] == 0b0110);
-    try expect(V[0xB] == 0b1101);
-    try expect(V[0xF] == 1);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0b0110, V[0xA]);
+    try expectEqual(u8, 0b1101, V[0xB]);
+    try expectEqual(u8, 1, V[0xF]);
+    try expectEqual(u16, 0x202, cpu.PC);
 
     V[0xB] = 0b0010;
     cpu.shiftRight(0xA, 0xB);
-    try expect(V[0xA] == 0b0001);
-    try expect(V[0xB] == 0b0010);
-    try expect(V[0xF] == 0);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u8, 0b0001, V[0xA]);
+    try expectEqual(u8, 0b0010, V[0xB]);
+    try expectEqual(u8, 0, V[0xF]);
+    try expectEqual(u16, 0x204, cpu.PC);
 }
 
 test "Cpu right shifts VX into itself if quirk is enabled" {
     var memory: [4096]u8 = std.mem.zeroes([4096]u8);
-    Loader.loadFonts(&memory);
+    Loader.initMem(&memory);
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
@@ -737,17 +748,17 @@ test "Cpu right shifts VX into itself if quirk is enabled" {
     V[0xB] = 0b1111;
 
     cpu.shiftRight(0xA, 0xB);
-    try expect(V[0xA] == 0b0110);
-    try expect(V[0xB] == 0b1111);
-    try expect(V[0xF] == 1);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0b0110, V[0xA]);
+    try expectEqual(u8, 0b1111, V[0xB]);
+    try expectEqual(u8, 1, V[0xF]);
+    try expectEqual(u16, 0x202, cpu.PC);
 
     V[0xA] = 0b0010;
     cpu.shiftRight(0xA, 0xB);
-    try expect(V[0xA] == 0b0001);
-    try expect(V[0xB] == 0b1111);
-    try expect(V[0xF] == 0);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u8, 0b0001, V[0xA]);
+    try expectEqual(u8, 0b1111, V[0xB]);
+    try expectEqual(u8, 0, V[0xF]);
+    try expectEqual(u16, 0x204, cpu.PC);
 }
 
 test "Cpu sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
@@ -758,21 +769,21 @@ test "Cpu sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
     V[0xB] = 0x0A;
 
     cpu.subStore(0xA, 0xB);
-    try expect(V[0xA] == 0x01);
-    try expect(V[0xF] == 1);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0x01, V[0xA]);
+    try expectEqual(u8, 1, V[0xF]);
+    try expectEqual(u16, 0x202, cpu.PC);
 
     V[0xA] = 0xC;
     cpu.subStore(0xA, 0xB);
-    try expect(V[0xA] == 0xFE);
-    try expect(V[0xF] == 0);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u8, 0xFE, V[0xA]);
+    try expectEqual(u8, 0, V[0xF]);
+    try expectEqual(u16, 0x204, cpu.PC);
 
     V[0xA] = 0x3;
     cpu.subStore(0xA, 0xB);
-    try expect(V[0xA] == 0x07);
-    try expect(V[0xF] == 1);
-    try expect(cpu.PC == 0x206);
+    try expectEqual(u8, 0x07, V[0xA]);
+    try expectEqual(u8, 1, V[0xF]);
+    try expectEqual(u16, 0x206, cpu.PC);
 }
 
 test "Cpu left shifts VY into VX and sets VF to the MSB (8XYE)" {
@@ -783,22 +794,22 @@ test "Cpu left shifts VY into VX and sets VF to the MSB (8XYE)" {
     V[0xB] = 0b11011111;
 
     cpu.shiftLeft(0xA, 0xB);
-    try expect(V[0xA] == 0b10111110);
-    try expect(V[0xB] == 0b11011111);
-    try expect(V[0xF] == 1);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0b10111110, V[0xA]);
+    try expectEqual(u8, 0b11011111, V[0xB]);
+    try expectEqual(u8, 1, V[0xF]);
+    try expectEqual(u16, 0x202, cpu.PC);
 
     V[0xB] = 0b00101111;
     cpu.shiftLeft(0xA, 0xB);
-    try expect(V[0xA] == 0b01011110);
-    try expect(V[0xB] == 0b00101111);
-    try expect(V[0xF] == 0);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u8, 0b01011110, V[0xA]);
+    try expectEqual(u8, 0b00101111, V[0xB]);
+    try expectEqual(u8, 0, V[0xF]);
+    try expectEqual(u16, 0x204, cpu.PC);
 }
 
 test "Cpu left shifts VX into itself if quirk is enabled" {
     var memory: [4096]u8 = std.mem.zeroes([4096]u8);
-    Loader.loadFonts(&memory);
+    Loader.initMem(&memory);
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
@@ -810,17 +821,17 @@ test "Cpu left shifts VX into itself if quirk is enabled" {
     V[0xB] = 0;
 
     cpu.shiftLeft(0xA, 0xB);
-    try expect(V[0xA] == 0b10111110);
-    try expect(V[0xB] == 0);
-    try expect(V[0xF] == 1);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0b10111110, V[0xA]);
+    try expectEqual(u8, 0, V[0xB]);
+    try expectEqual(u8, 1, V[0xF]);
+    try expectEqual(u16, 0x202, cpu.PC);
 
     V[0xA] = 0b00101111;
     cpu.shiftLeft(0xA, 0xB);
-    try expect(V[0xA] == 0b01011110);
-    try expect(V[0xB] == 0);
-    try expect(V[0xF] == 0);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u8, 0b01011110, V[0xA]);
+    try expectEqual(u8, 0, V[0xB]);
+    try expectEqual(u8, 0, V[0xF]);
+    try expectEqual(u16, 0x204, cpu.PC);
 }
 
 test "Cpu skips if not equal register (9XY0)" {
@@ -831,19 +842,19 @@ test "Cpu skips if not equal register (9XY0)" {
     V[0xB] = 0xA;
 
     cpu.skipIfNotEqual(0xA, 0xB);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u16, 0x204, cpu.PC);
 
     V[0xB] = 0x5;
     cpu.skipIfNotEqual(0xA, 0xB);
-    try expect(cpu.PC == 0x206);
+    try expectEqual(u16, 0x206, cpu.PC);
 }
 
 test "Cpu stores memory address into I (ANNN)" {
     var cpu = getTestCpu();
 
     cpu.storeAddress(0x300);
-    try expect(cpu.I == 0x300);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u16, 0x300, cpu.I);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu jumps to NNN plus V0 (BNNN)" {
@@ -853,7 +864,7 @@ test "Cpu jumps to NNN plus V0 (BNNN)" {
     V[0] = 0x10;
 
     cpu.jumpWithOffset(0x400);
-    try expect(cpu.PC == 0x410);
+    try expectEqual(u16, 0x410, cpu.PC);
 }
 
 test "Cpu sets VX to a random number with mask (CXNN)" {
@@ -862,8 +873,8 @@ test "Cpu sets VX to a random number with mask (CXNN)" {
     const V = cpu.registers();
 
     cpu.genRandom(0xA, 0b11110000);
-    try expect(V[0xA] == 0b11010000);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 0b11010000, V[0xA]);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu draws sprite (DXYN)" {
@@ -934,71 +945,71 @@ test "Cpu draws sprite (DXYN)" {
     // }
 
     // 0xF0, 0x90, 0x90, 0x90, 0xF0 // 0
-    try expect(s[0] == 0xF0);
-    try expect(s[8] == 0x90);
-    try expect(s[16] == 0x90);
-    try expect(s[24] == 0x90);
-    try expect(s[32] == 0xF0);
+    try expectEqual(u8, 0xF0, s[0]);
+    try expectEqual(u8, 0x90, s[8]);
+    try expectEqual(u8, 0x90, s[16]);
+    try expectEqual(u8, 0x90, s[24]);
+    try expectEqual(u8, 0xF0, s[32]);
 
     // 0x20, 0x60, 0x20, 0x20, 0x70 // 1
-    try expect(s[2] == 0x20);
-    try expect(s[10] == 0x60);
-    try expect(s[18] == 0x20);
-    try expect(s[26] == 0x20);
-    try expect(s[34] == 0x70);
+    try expectEqual(u8, 0x20, s[2]);
+    try expectEqual(u8, 0x60, s[10]);
+    try expectEqual(u8, 0x20, s[18]);
+    try expectEqual(u8, 0x20, s[26]);
+    try expectEqual(u8, 0x70, s[34]);
 
     // 0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-    try expect(s[128] == 0xF0);
-    try expect(s[136] == 0x10);
-    try expect(s[144] == 0xF0);
-    try expect(s[152] == 0x80);
-    try expect(s[160] == 0xF0);
+    try expectEqual(u8, 0xF0, s[128]);
+    try expectEqual(u8, 0x10, s[136]);
+    try expectEqual(u8, 0xF0, s[144]);
+    try expectEqual(u8, 0x80, s[152]);
+    try expectEqual(u8, 0xF0, s[160]);
 
     // 0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-    try expect(s[130] == 0xF0);
-    try expect(s[138] == 0x10);
-    try expect(s[146] == 0xF0);
-    try expect(s[154] == 0x10);
-    try expect(s[162] == 0xF0);
+    try expectEqual(u8, 0xF0, s[130]);
+    try expectEqual(u8, 0x10, s[138]);
+    try expectEqual(u8, 0xF0, s[146]);
+    try expectEqual(u8, 0x10, s[154]);
+    try expectEqual(u8, 0xF0, s[162]);
 
     // 0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-    try expect(s[3] == 0x78);
-    try expect(s[11] == 0x40);
-    try expect(s[19] == 0x78);
-    try expect(s[27] == 0x08);
-    try expect(s[35] == 0x78);
+    try expectEqual(u8, 0x78, s[3]);
+    try expectEqual(u8, 0x40, s[11]);
+    try expectEqual(u8, 0x78, s[19]);
+    try expectEqual(u8, 0x08, s[27]);
+    try expectEqual(u8, 0x78, s[35]);
 
     // 0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-    try expect(s[131] == 0x03);
-    try expect(s[132] == 0xC0);
-    try expect(s[139] == 0x02);
-    try expect(s[140] == 0x40);
-    try expect(s[147] == 0x03);
-    try expect(s[148] == 0xC0);
-    try expect(s[155] == 0x00);
-    try expect(s[156] == 0x40);
-    try expect(s[163] == 0x03);
-    try expect(s[164] == 0xC0);
+    try expectEqual(u8, 0x03, s[131]);
+    try expectEqual(u8, 0xC0, s[132]);
+    try expectEqual(u8, 0x02, s[139]);
+    try expectEqual(u8, 0x40, s[140]);
+    try expectEqual(u8, 0x03, s[147]);
+    try expectEqual(u8, 0xC0, s[148]);
+    try expectEqual(u8, 0x00, s[155]);
+    try expectEqual(u8, 0x40, s[156]);
+    try expectEqual(u8, 0x03, s[163]);
+    try expectEqual(u8, 0xC0, s[164]);
 
     // 0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-    try expect(s[64] == 0xC0);
-    try expect(s[71] == 0x03);
-    try expect(s[72] == 0x40);
-    try expect(s[79] == 0x00);
-    try expect(s[80] == 0x80);
-    try expect(s[87] == 0x00);
-    try expect(s[88] == 0x00);
-    try expect(s[95] == 0x01);
-    try expect(s[96] == 0x00);
-    try expect(s[103] == 0x01);
+    try expectEqual(u8, 0xC0, s[64]);
+    try expectEqual(u8, 0x03, s[71]);
+    try expectEqual(u8, 0x40, s[72]);
+    try expectEqual(u8, 0x00, s[79]);
+    try expectEqual(u8, 0x80, s[80]);
+    try expectEqual(u8, 0x00, s[87]);
+    try expectEqual(u8, 0x00, s[88]);
+    try expectEqual(u8, 0x01, s[95]);
+    try expectEqual(u8, 0x00, s[96]);
+    try expectEqual(u8, 0x01, s[103]);
 
     // 0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-    try expect(s[1] == 0xF0);
-    try expect(s[9] == 0x90);
-    try expect(s[17] == 0xF0);
-    try expect(s[241] == 0xF0);
-    try expect(s[249] == 0x90);
-    try expect(cpu.PC == 0x210);
+    try expectEqual(u8, 0xF0, s[1]);
+    try expectEqual(u8, 0x90, s[9]);
+    try expectEqual(u8, 0xF0, s[17]);
+    try expectEqual(u8, 0xF0, s[241]);
+    try expectEqual(u8, 0x90, s[249]);
+    try expectEqual(u16, 0x210, cpu.PC);
 }
 
 test "Cpu sets VF if drawing erases any pixels" {
@@ -1010,26 +1021,26 @@ test "Cpu sets VF if drawing erases any pixels" {
 
     // Draw unsets VF if no collisions happen
     cpu.draw(0xA, 0xB, 5);
-    try expect(V[0xF] == 0);
+    try expectEqual(u8, 0, V[0xF]);
 
     // Draw sets VF since a collision happened
     V[0xB] = 4;
     cpu.draw(0xA, 0xB, 5);
-    try expect(V[0xF] == 1);
+    try expectEqual(u8, 1, V[0xF]);
 }
 
 test "splitMask helper splits masks correctly" {
     var res = Cpu.splitMask(0b10101111, 4);
-    try expect(res.left == 0b1010);
-    try expect(res.right == 0b11110000);
+    try expectEqual(u8, 0b1010, res.left);
+    try expectEqual(u8, 0b11110000, res.right);
 
     res = Cpu.splitMask(0b01001101, 2);
-    try expect(res.left == 0b00010011);
-    try expect(res.right == 0b01000000);
+    try expectEqual(u8, 0b00010011, res.left);
+    try expectEqual(u8, 0b01000000, res.right);
 
     res = Cpu.splitMask(0b11001101, 3);
-    try expect(res.left == 0b00011001);
-    try expect(res.right == 0b10100000);
+    try expectEqual(u8, 0b00011001, res.left);
+    try expectEqual(u8, 0b10100000, res.right);
 }
 
 test "Cpu skips next instruction if key in VX is pressed (EX9E)" {
@@ -1040,11 +1051,11 @@ test "Cpu skips next instruction if key in VX is pressed (EX9E)" {
 
     V[0xA] = 7;
     cpu.skipIfPressed(0xA);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u16, 0x204, cpu.PC);
 
     V[0xA] = 8;
     cpu.skipIfPressed(0xA);
-    try expect(cpu.PC == 0x206);
+    try expectEqual(u16, 0x206, cpu.PC);
 }
 
 test "Cpu skips next instruction f key in VX is not pressed (EXA1)" {
@@ -1055,11 +1066,11 @@ test "Cpu skips next instruction f key in VX is not pressed (EXA1)" {
 
     V[0xA] = 7;
     cpu.skipIfNotPressed(0xA);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u16, 0x202, cpu.PC);
 
     V[0xA] = 8;
     cpu.skipIfNotPressed(0xA);
-    try expect(cpu.PC == 0x206);
+    try expectEqual(u16, 0x206, cpu.PC);
 }
 
 test "Cpu stores the value of the delay timer in VX (FX07)" {
@@ -1068,8 +1079,8 @@ test "Cpu stores the value of the delay timer in VX (FX07)" {
 
     cpu.delay_timer.value = 10;
     cpu.storeDelayTimer(0xA);
-    try expect(V[0xA] == 10);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 10, V[0xA]);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu waits for keypress and stores result in VX (FX0A)" {
@@ -1080,8 +1091,8 @@ test "Cpu waits for keypress and stores result in VX (FX0A)" {
     cpu.keypad.pressKey(5);
     cpu.keypad.releaseKey(5);
     nosuspend await frame;
-    try expect(V[0xA] == 5);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 5, V[0xA]);
+    try expectEqual(u16, 0x202, cpu.PC);
 
     frame = async cpu.waitForKeypress(0xC);
     cpu.keypad.pressKey(5);
@@ -1090,8 +1101,8 @@ test "Cpu waits for keypress and stores result in VX (FX0A)" {
     cpu.keypad.releaseKey(6);
     nosuspend await frame;
 
-    try expect(V[0xC] == 6);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u8, 6, V[0xC]);
+    try expectEqual(u16, 0x204, cpu.PC);
 }
 
 test "Cpu sets delay timer to value found in VX (FX15)" {
@@ -1100,8 +1111,8 @@ test "Cpu sets delay timer to value found in VX (FX15)" {
 
     V[0xA] = 10;
     cpu.setDelayTimer(0xA);
-    try expect(cpu.delay_timer.value == 10);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 10, cpu.delay_timer.value);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu sets sound timer to value found in VX (FX18)" {
@@ -1110,14 +1121,14 @@ test "Cpu sets sound timer to value found in VX (FX18)" {
 
     V[0xA] = 10;
     cpu.setSoundTimer(0xA);
-    try expect(cpu.sound_timer.value == 10);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 10, cpu.sound_timer.value);
+    try expectEqual(u16, 0x202, cpu.PC);
 
     // Setting the sound timer to values below 2 has no effect
     V[0xA] = 1;
     cpu.setSoundTimer(0xA);
-    try expect(cpu.sound_timer.value == 0);
-    try expect(cpu.PC == 0x204);
+    try expectEqual(u8, 0, cpu.sound_timer.value);
+    try expectEqual(u16, 0x204, cpu.PC);
 }
 
 test "Cpu adds the value from VX into I (FX1E)" {
@@ -1128,8 +1139,8 @@ test "Cpu adds the value from VX into I (FX1E)" {
     cpu.I = 10;
 
     cpu.addToI(0xA);
-    try expect(cpu.I == 15);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u16, 15, cpu.I);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu sets I to sprite found in VX (FX29)" {
@@ -1138,8 +1149,8 @@ test "Cpu sets I to sprite found in VX (FX29)" {
 
     V[0xA] = 5;
     cpu.setSprite(0xA);
-    try expect(cpu.I == 25);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u16, 25, cpu.I);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu stores BCD of value in VX at I (FX33)" {
@@ -1151,19 +1162,19 @@ test "Cpu stores BCD of value in VX at I (FX33)" {
 
     cpu.setBcd(0xA);
 
-    try expect(cpu.mem[0x500] == 1);
-    try expect(cpu.mem[0x501] == 2);
-    try expect(cpu.mem[0x502] == 3);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u8, 1, cpu.mem[0x500]);
+    try expectEqual(u8, 2, cpu.mem[0x501]);
+    try expectEqual(u8, 3, cpu.mem[0x502]);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu dumps register into memory I (FX55)" {
     var cpu = getTestCpu();
     const V = cpu.registers();
 
-    var i: usize = 0;
+    var i: u8 = 0;
     while (i < 16) : (i += 1) {
-        V[i] = @intCast(u8, i);
+        V[i] = i;
     }
 
     cpu.I = 0x500;
@@ -1172,28 +1183,28 @@ test "Cpu dumps register into memory I (FX55)" {
     i = 0;
     while (i < 16) : (i += 1) {
         if (i <= 5) {
-            try expect(cpu.mem[0x500 + i] == @intCast(u8, i));
+            try expectEqual(u8, i, cpu.mem[0x500 + @as(usize, i)]);
         } else {
-            try expect(cpu.mem[0x500 + i] == 0);
+            try expectEqual(u8, 0, cpu.mem[0x500 + @as(usize, i)]);
         }
     }
 
-    try expect(cpu.I == 0x500 + 5 + 1);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u16, 0x500 + 5 + 1, cpu.I);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu dumps registers into memory but doesn't touch I if quirk is enabled" {
     var memory: [4096]u8 = std.mem.zeroes([4096]u8);
-    Loader.loadFonts(&memory);
+    Loader.initMem(&memory);
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
     var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false, .register_quirk = true });
     const V = cpu.registers();
 
-    var i: usize = 0;
+    var i: u8 = 0;
     while (i < 16) : (i += 1) {
-        V[i] = @intCast(u8, i);
+        V[i] = i;
     }
 
     cpu.I = 0x500;
@@ -1202,23 +1213,23 @@ test "Cpu dumps registers into memory but doesn't touch I if quirk is enabled" {
     i = 0;
     while (i < 16) : (i += 1) {
         if (i <= 5) {
-            try expect(cpu.mem[0x500 + i] == @intCast(u8, i));
+            try expectEqual(u8, i, cpu.mem[0x500 + @as(usize, i)]);
         } else {
-            try expect(cpu.mem[0x500 + i] == 0);
+            try expectEqual(u8, 0, cpu.mem[0x500 + @as(usize, i)]);
         }
     }
 
-    try expect(cpu.I == 0x500);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u16, 0x500, cpu.I);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu restores registers from memory I (FX65)" {
     var cpu = getTestCpu();
     const V = cpu.registers();
 
-    var i: usize = 0;
+    var i: u8 = 0;
     while (i < 16) : (i += 1) {
-        cpu.mem[0x500 + i] = @intCast(u8, i);
+        cpu.mem[0x500 + @as(usize, i)] = i;
     }
 
     cpu.I = 0x500;
@@ -1226,28 +1237,28 @@ test "Cpu restores registers from memory I (FX65)" {
 
     while (i < 16) : (i += 1) {
         if (i <= 5) {
-            try expect(V[i] == @intCast(u8, i));
+            try expectEqual(u8, i, V[i]);
         } else {
-            try expect(V[i] == 0);
+            try expectEqual(u8, 0, V[i]);
         }
     }
 
-    try expect(cpu.I == 0x500 + 5 + 1);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u16, 0x500 + 5 + 1, cpu.I);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "Cpu restores registers from memory I but doesn't touch I if quirk is enabled" {
     var memory: [4096]u8 = std.mem.zeroes([4096]u8);
-    Loader.loadFonts(&memory);
+    Loader.initMem(&memory);
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
     var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false, .register_quirk = true });
     const V = cpu.registers();
 
-    var i: usize = 0;
+    var i: u8 = 0;
     while (i < 16) : (i += 1) {
-        cpu.mem[0x500 + i] = @intCast(u8, i);
+        cpu.mem[0x500 + @as(usize, i)] = i;
     }
 
     cpu.I = 0x500;
@@ -1255,14 +1266,14 @@ test "Cpu restores registers from memory I but doesn't touch I if quirk is enabl
 
     while (i < 16) : (i += 1) {
         if (i <= 5) {
-            try expect(V[i] == @intCast(u8, i));
+            try expectEqual(u8, i, V[i]);
         } else {
-            try expect(V[i] == 0);
+            try expectEqual(u8, 0, V[i]);
         }
     }
 
-    try expect(cpu.I == 0x500);
-    try expect(cpu.PC == 0x202);
+    try expectEqual(u16, 0x500, cpu.I);
+    try expectEqual(u16, 0x202, cpu.PC);
 }
 
 test "decode extracts bits correctly" {
@@ -1275,9 +1286,9 @@ test "decode extracts bits correctly" {
 
     const nnn: u16 = @shlExact(@as(u16, b), 8) + second;
 
-    try expect(a == 0xA);
-    try expect(b == 0xB);
-    try expect(c == 0xC);
-    try expect(d == 0xD);
-    try expect(nnn == 0xBCD);
+    try expectEqual(u8, 0xA, a);
+    try expectEqual(u8, 0xB, b);
+    try expectEqual(u8, 0xC, c);
+    try expectEqual(u8, 0xD, d);
+    try expectEqual(u16, 0xBCD, nnn);
 }

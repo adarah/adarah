@@ -22,8 +22,8 @@ export fn init(seed: c_uint, start_time: c_int, clock_frequency_hz: c_int, shift
     cpu_clock_frequency_hz = clock_frequency_hz;
     prev_time_ms = start_time;
 
-    var mem: [4096]u8 = std.mem.zeroes([4096]u8);
-    Loader.loadFonts(&mem);
+    var mem: [4096]u8 = undefined;
+    Loader.initMem(&mem);
 
     var game = game_data[0..@intCast(usize, game_length)];
     Loader.loadGame(&mem, game);
