@@ -9,7 +9,7 @@ pub fn build(b: *std.build.Builder) void {
 
     lib.setBuildMode(mode);
     lib.setTarget(.{ .cpu_arch = .wasm32, .os_tag = .freestanding });
-    lib.setOutputDir("../web/assets");
+    lib.setOutputDir("../web/static");
     lib.install();
 
     const main_tests = b.addTest("src/main.zig");
