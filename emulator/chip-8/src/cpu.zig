@@ -6,7 +6,7 @@ const fmt = std.fmt;
 const rand = std.rand;
 
 const CpuOptions = struct {
-    memory: [4096]u8,
+    memory: *[4096]u8,
     keypad: *Keypad,
     sound_timer: *Timer,
     delay_timer: *Timer,
@@ -16,10 +16,8 @@ const CpuOptions = struct {
 };
 
 pub const Cpu = struct {
-    const MEM_SIZE = 4096;
-
     // Memory
-    mem: [MEM_SIZE]u8,
+    mem: *[4096]u8,
 
     // Special Registers
     I: u16 = 0,
@@ -45,8 +43,19 @@ pub const Cpu = struct {
         return Self{ .mem = options.memory, .rand = random, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer, .shift_quirk = options.shift_quirk, .register_quirk = options.register_quirk };
     }
 
+    // PC, SP, and I are stored in the memory for convenience
+    // pub inline fn PC(self: *Self) u16 {}
+
+    pub inline fn stack(self: *Self) *[48]u8 {
+        return self.mem[0xEA0..0xED0];
+    }
+
+    pub inline fn registers(self: *Self) *[16]u8 {
+        return self.mem[0xEF0..0xF00];
+    }
+
     pub inline fn display_buffer(self: *Self) *[256]u8 {
-        return self.mem[MEM_SIZE - 256 ..];
+        return self.mem[0xF00..];
     }
 
     inline fn stackPush(self: *Self, address: u16) void {
@@ -70,14 +79,6 @@ pub const Cpu = struct {
         const msb = @as(u16, self.mem[self.SP + 1]);
         const lsb = self.mem[self.SP + 2];
         return @shlExact(msb, 8) + lsb;
-    }
-
-    pub inline fn stack(self: *Self) *[48]u8 {
-        return self.mem[0xEA0..0xED0];
-    }
-
-    pub inline fn registers(self: *Self) *[16]u8 {
-        return self.mem[0xEF0..0xF00];
     }
 
     pub fn fetchDecodeExecute(self: *Self) void {

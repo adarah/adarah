@@ -33,7 +33,7 @@ export fn init(seed: c_uint, start_time: c_int, clock_frequency_hz: c_int, shift
     delay_timer = Timer.init(0);
     cpu = Cpu.init(.{
         .seed = seed,
-        .memory = mem,
+        .memory = &mem,
         .keypad = &keypad,
         .sound_timer = &sound_timer,
         .delay_timer = &delay_timer,
@@ -96,7 +96,7 @@ export fn debugStep() void {
     const s = cpu.stack();
     wasm.setStack(s, s.len);
 
-    wasm.setMem(&cpu.mem, cpu.mem.len);
+    wasm.setMem(cpu.mem, cpu.mem.len);
 
     const display = cpu.display_buffer();
     wasm.draw(display, display.len);
@@ -106,7 +106,7 @@ export fn debugSetState(pc: c_uint, sp: c_uint, i_reg: c_uint, memory: [*]const 
     cpu.PC = @intCast(u16, pc);
     cpu.SP = @intCast(u16, sp);
     cpu.I = @intCast(u16, i_reg);
-    std.mem.copy(u8, &cpu.mem, memory[0..4096]);
+    std.mem.copy(u8, cpu.mem, memory[0..4096]);
 }
 
 // This is the panic handler. Use util.panic for better convenience.
