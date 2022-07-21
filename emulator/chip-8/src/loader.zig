@@ -25,23 +25,25 @@ pub const Loader = struct {
         0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
         0xF0, 0x80, 0xF0, 0x80, 0x80, // F
     };
-    //  In an interpreter written for a contemporary device, the user’s programme should be loaded at 0x0200
-    // in the virtual machine RAM and the interpreter should begin execution from that point. However, the
-    // original Chip-8 interpreter began execution from 0x01FC. The interpreter includes two permanent Chip-8
-    // instructions at this location that are always executed at the start of every programme. The first of
-    // these, 0x00E0, clears the display RAM by setting all the bits to zero. The second, 0x004B, calls a
-    // machine language routine within the interpreter that switches the VIP’s display on
 
     const GAME_START_ADDRESS = 0x200;
 
     pub fn initMem(buf: *[4096]u8) void {
         buf.* = std.mem.zeroes([4096]u8);
         std.mem.copy(u8, buf, &Loader.FONTS);
+
+        // In an interpreter written for a contemporary device, the user’s programme should be loaded at 0x0200
+        // in the virtual machine RAM and the interpreter should begin execution from that point. However, the
+        // original Chip-8 interpreter began execution from 0x01FC. The interpreter includes two permanent Chip-8
+        // instructions at this location that are always executed at the start of every programme. The first of
+        // these, 0x00E0, clears the display RAM by setting all the bits to zero. The second, 0x004B, calls a
+        // machine language routine within the interpreter that switches the VIP’s display on
         buf[0x1FC..0x200].* = .{ 0x00, 0xE0, 0x00, 0x4B };
+
         // These bytes show the text COSMAC on the screen. It's ok to have them here since they will be wiped by the
         // initial 0x00E0 instruction at the start of any program
         if (!builtin.is_test) {
-            const COSMAC: [48]u8 = [_]u8{
+            buf[0xF00..0xF30].* = .{
                 0xF9, 0xF3, 0xE6, 0xCF, 0x9F, 0x00, 0x00, 0x00,
                 0x81, 0x12, 0x07, 0xC8, 0x90, 0x00, 0x00, 0x00,
                 0x81, 0x13, 0xE5, 0x4F, 0x90, 0x00, 0x00, 0x00,
@@ -49,9 +51,6 @@ pub const Loader = struct {
                 0xF9, 0xF3, 0xE4, 0x48, 0x9F, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             };
-            for (COSMAC) |b, i| {
-                buf[0xF00 + i] = b;
-            }
         }
     }
 

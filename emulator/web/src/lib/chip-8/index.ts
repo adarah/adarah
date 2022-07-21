@@ -1,0 +1,1 @@
+export { default } from './chip-8.svelte';

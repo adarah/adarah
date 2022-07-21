@@ -10,6 +10,7 @@ const Timer = @import("./timer.zig").Timer;
 
 pub const log_level: std.log.Level = .info;
 
+var mem: [4096]u8 = undefined;
 var cpu: Cpu = undefined;
 var keypad: Keypad = undefined;
 var sound_timer: Timer = undefined;
@@ -22,11 +23,12 @@ export fn init(seed: c_uint, start_time: c_int, clock_frequency_hz: c_int, shift
     cpu_clock_frequency_hz = clock_frequency_hz;
     prev_time_ms = start_time;
 
-    var mem: [4096]u8 = undefined;
     Loader.initMem(&mem);
 
+    wasm.info("inited mem", .{});
     var game = game_data[0..@intCast(usize, game_length)];
     Loader.loadGame(&mem, game);
+    wasm.info("loaded game", .{});
 
     keypad = Keypad.init();
     sound_timer = Timer.init(0);
@@ -73,16 +75,20 @@ export fn onAnimationFrame(now_time_ms: c_int) void {
     while (i < num_instructions) : (i += 1) {
         global_frame = async cpu.fetchDecodeExecute();
     }
-    const display = cpu.display_buffer();
-    wasm.draw(display, display.len);
+    // const display = cpu.display_buffer();
+    // wasm.draw(display, display.len);
 }
 
 export fn timerTick() void {
     sound_timer.tick();
     delay_timer.tick();
-    if (sound_timer.value > 0) {
-        wasm.playAudio();
-    }
+    // if (sound_timer.value > 0) {
+    //     wasm.playAudio();
+    // }
+}
+
+export fn getMemPtr() [*]u8 {
+    return cpu.mem;
 }
 
 // Functions used by the debugger
@@ -90,24 +96,24 @@ export fn timerTick() void {
 export fn debugStep() void {
     global_frame = async cpu.fetchDecodeExecute();
 
-    const V = cpu.registers();
-    wasm.setRegisters(cpu.PC, cpu.SP, cpu.I, V, V.len);
+    // const V = cpu.registers();
+    // wasm.setRegisters(cpu.PC, cpu.SP, cpu.I, V, V.len);
 
-    const s = cpu.stack();
-    wasm.setStack(s, s.len);
+    // const s = cpu.stack();
+    // wasm.setStack(s, s.len);
 
-    wasm.setMem(cpu.mem, cpu.mem.len);
+    // wasm.setMem(cpu.mem, cpu.mem.len);
 
-    const display = cpu.display_buffer();
-    wasm.draw(display, display.len);
+    // const display = cpu.display_buffer();
+    // wasm.draw(display, display.len);
 }
 
-export fn debugSetState(pc: c_uint, sp: c_uint, i_reg: c_uint, memory: [*]const u8) void {
-    cpu.PC = @intCast(u16, pc);
-    cpu.SP = @intCast(u16, sp);
-    cpu.I = @intCast(u16, i_reg);
-    std.mem.copy(u8, cpu.mem, memory[0..4096]);
-}
+// export fn debugSetState(pc: c_uint, sp: c_uint, i_reg: c_uint, memory: [*]const u8) void {
+//     cpu.PC = @intCast(u16, pc);
+//     cpu.SP = @intCast(u16, sp);
+//     cpu.I = @intCast(u16, i_reg);
+//     std.mem.copy(u8, cpu.mem, memory[0..4096]);
+// }
 
 // This is the panic handler. Use util.panic for better convenience.
 pub fn panic(message: []const u8, trace: ?*std.builtin.StackTrace) noreturn {

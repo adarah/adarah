@@ -28,7 +28,7 @@ pub const Cpu = struct {
     keypad: *Keypad,
     sound_timer: *Timer,
     delay_timer: *Timer,
-    rand: rand.Random,
+    prng: rand.DefaultPrng,
 
     // Quirks
     shift_quirk: bool,
@@ -38,9 +38,8 @@ pub const Cpu = struct {
 
     pub fn init(options: CpuOptions) Self {
         var prng = rand.DefaultPrng.init(options.seed);
-        const random = prng.random();
 
-        return Self{ .mem = options.memory, .rand = random, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer, .shift_quirk = options.shift_quirk, .register_quirk = options.register_quirk };
+        return Self{ .mem = options.memory, .prng = prng, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer, .shift_quirk = options.shift_quirk, .register_quirk = options.register_quirk };
     }
 
     // PC, SP, and I are stored in the memory for convenience
@@ -313,7 +312,8 @@ pub const Cpu = struct {
 
     pub fn genRandom(self: *Self, register: u4, mask: u8) void {
         const V = self.registers();
-        V[register] = self.rand.int(u8) & mask;
+        const r = self.prng.random().int(u8);
+        V[register] = r & mask;
         self.PC += 2;
     }
 
@@ -483,14 +483,14 @@ fn expectEqual(comptime T: type, expected: T, actual: T) !void {
 var test_keypad: Keypad = undefined;
 var test_sound_timer: Timer = undefined;
 var test_delay_timer: Timer = undefined;
+var test_memory: [4096]u8 = undefined;
 
 fn getTestCpu() Cpu {
-    var memory: [4096]u8 = std.mem.zeroes([4096]u8);
-    Loader.initMem(&memory);
+    Loader.initMem(&test_memory);
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
-    return Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false, .register_quirk = false });
+    return Cpu.init(.{ .seed = 0, .memory = &test_memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false, .register_quirk = false });
 }
 
 test "Cpu makes syscall (0NNN)" {
@@ -740,7 +740,7 @@ test "Cpu right shifts VX into itself if quirk is enabled" {
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
-    var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = true, .register_quirk = false });
+    var cpu = Cpu.init(.{ .seed = 0, .memory = &memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = true, .register_quirk = false });
 
     const V = cpu.registers();
 
@@ -813,7 +813,7 @@ test "Cpu left shifts VX into itself if quirk is enabled" {
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
-    var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = true, .register_quirk = false });
+    var cpu = Cpu.init(.{ .seed = 0, .memory = &memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = true, .register_quirk = false });
 
     const V = cpu.registers();
 
@@ -1199,7 +1199,7 @@ test "Cpu dumps registers into memory but doesn't touch I if quirk is enabled" {
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
-    var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false, .register_quirk = true });
+    var cpu = Cpu.init(.{ .seed = 0, .memory = &memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false, .register_quirk = true });
     const V = cpu.registers();
 
     var i: u8 = 0;
@@ -1253,7 +1253,7 @@ test "Cpu restores registers from memory I but doesn't touch I if quirk is enabl
     test_keypad = Keypad.init();
     test_sound_timer = Timer.init(0);
     test_delay_timer = Timer.init(0);
-    var cpu = Cpu.init(.{ .seed = 0, .memory = memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false, .register_quirk = true });
+    var cpu = Cpu.init(.{ .seed = 0, .memory = &memory, .keypad = &test_keypad, .sound_timer = &test_sound_timer, .delay_timer = &test_delay_timer, .shift_quirk = false, .register_quirk = true });
     const V = cpu.registers();
 
     var i: u8 = 0;
