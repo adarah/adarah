@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Chip8 from '$lib/chip-8'
-	let gameName: string
+	let gameName: string = "INVADERS";
 </script>
 
 <h1>Welcome to SvelteKit</h1>
@@ -8,6 +8,8 @@
 <select bind:value={gameName}>
 	<option value="INVADERS">Space invaders</option>
 	<option value="TETRIS">Tetris</option>
+	<option value="PONG">Pong</option>
+	<option value="PONG2">Pong 2</option>
 </select>
 
 <Chip8 {gameName} />

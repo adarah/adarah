@@ -97,14 +97,14 @@ pub const Cpu = struct {
         return self.mem[0xF00..];
     }
 
-    inline fn stackPush(self: *Self, address: u16) void {
+    fn stackPush(self: *Self, address: u16) void {
         // Chip-8 is big endian, so the most significant byte goes in a lower memory address
         const sp = self.SP();
         self.setWord(sp - 1, address);
         self.setSP(sp - 2);
     }
 
-    inline fn stackPop(self: *Self) u16 {
+    fn stackPop(self: *Self) u16 {
         // Chip-8 is big endian, so the most significant byte goes in a lower memory address
         const sp = self.SP();
         const stack_top = self.getWord(sp + 1);
@@ -112,7 +112,7 @@ pub const Cpu = struct {
         return stack_top;
     }
 
-    inline fn stackPeek(self: *Self) u16 {
+    fn stackPeek(self: *Self) u16 {
         // SP always points to next available position, so SP+1 contains the top of the stack
         // (remember, stacks grow downwards)
         return self.getWord(self.SP() + 1);
@@ -122,17 +122,31 @@ pub const Cpu = struct {
         self.setPC(self.PC() + 2);
     }
 
+    fn fetchDecode(self: *Self, pc: u16) struct { a: u4, b: u4, c: u4, d: u4, lsb: u8, nnn: u16 } {
+        const first = self.mem[pc];
+        const second = self.mem[pc + 1];
+
+        const a: u4 = @truncate(u4, @shrExact(first & 0xF0, 4));
+        const b: u4 = @truncate(u4, first);
+        const c: u4 = @truncate(u4, @shrExact(second & 0xF0, 4));
+        const d: u4 = @truncate(u4, second);
+
+        const nnn: u16 = @shlExact(@as(u16, b), 8) + second;
+
+        return .{ .a = a, .b = b, .c = c, .d = d, .nnn = nnn, .lsb = second };
+    }
+
     pub fn fetchDecodeExecute(self: *Self) void {
         const pc = self.PC();
+        const decoded = self.fetchDecode(pc);
 
-        const nibbles = std.mem.bytesAsSlice(u4, self.mem[pc..][0..2]);
-        const a: u4 = nibbles[0];
-        const b: u4 = nibbles[1];
-        const c: u4 = nibbles[2];
-        const d: u4 = nibbles[3];
+        const a = decoded.a;
+        const b = decoded.b;
+        const c = decoded.c;
+        const d = decoded.d;
+        const lsb = decoded.lsb;
+        const nnn = decoded.nnn;
 
-        const lsb = self.mem[pc + 1];
-        const nnn: u16 = @shlExact(@as(u16, b), 8) + lsb;
         {
             std.log.debug("fetched: {}", .{fmt.fmtSliceHexUpper(self.mem[pc .. pc + 2])});
             std.log.debug("PC: {}", .{pc});
@@ -1323,18 +1337,13 @@ test "Cpu restores registers from memory I but doesn't touch I if quirk is enabl
 }
 
 test "decode extracts bits correctly" {
-    const first = 0xAB;
-    const second = 0xCD;
-    const a: u4 = @truncate(u4, @shrExact(first & 0xF0, 4));
-    const b: u4 = @truncate(u4, first);
-    const c: u4 = @truncate(u4, @shrExact(second & 0xF0, 4));
-    const d: u4 = @truncate(u4, second);
+    var cpu = getTestCpu();
+    cpu.setWord(0x200, 0xABCD);
+    const decoded = cpu.fetchDecode(0x200);
 
-    const nnn: u16 = @shlExact(@as(u16, b), 8) + second;
-
-    try expectEqual(u8, 0xA, a);
-    try expectEqual(u8, 0xB, b);
-    try expectEqual(u8, 0xC, c);
-    try expectEqual(u8, 0xD, d);
-    try expectEqual(u16, 0xBCD, nnn);
+    try expectEqual(u8, 0xA, decoded.a);
+    try expectEqual(u8, 0xB, decoded.b);
+    try expectEqual(u8, 0xC, decoded.c);
+    try expectEqual(u8, 0xD, decoded.d);
+    try expectEqual(u16, 0xBCD, decoded.nnn);
 }

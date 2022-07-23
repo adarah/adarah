@@ -19,7 +19,15 @@ var delay_timer: Timer = undefined;
 var cpu_clock_frequency_hz: c_int = undefined;
 var prev_time_ms: c_int = undefined;
 
-export fn init(seed: c_uint, start_time: c_int, clock_frequency_hz: c_int, shift_quirk: bool, register_quirk: bool, game_data: [*]const u8, game_length: c_int) void {
+export fn init(
+    seed: c_uint,
+    start_time: c_int,
+    clock_frequency_hz: c_int,
+    shift_quirk: bool,
+    register_quirk: bool,
+    game_data: [*]const u8,
+    game_length: c_int,
+) void {
     cpu_clock_frequency_hz = clock_frequency_hz;
     prev_time_ms = start_time;
 
@@ -63,6 +71,7 @@ export fn onAnimationFrame(now_time_ms: c_int) void {
     const elapsed = now_time_ms - prev_time_ms;
     const num_instructions = @divFloor(elapsed * cpu_clock_frequency_hz, 1000);
 
+    std.log.debug("elapsed: {}", .{elapsed});
     // Due to intentional imprecisions in the timer functions in the browser,
     // sometimes now is smaller than previous. Even if the time elapsed is positive,
     // the next frame might be requested too soon (notice the divFloor)
@@ -84,6 +93,14 @@ export fn timerTick() void {
 
 export fn getMemPtr() [*]u8 {
     return cpu.mem;
+}
+
+export fn getSoundTimer() c_uint {
+    return sound_timer.value;
+}
+
+export fn setCurrentTime(now_time_ms: c_int) void {
+    prev_time_ms = now_time_ms;
 }
 
 // Functions used by the debugger

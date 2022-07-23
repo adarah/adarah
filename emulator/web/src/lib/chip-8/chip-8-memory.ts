@@ -18,25 +18,25 @@ export class Chip8Memory {
     }
 
     private getWord(offset: number) {
-        const msb = this.array[this.baseOffset + offset];
-        const lsb = this.array[this.baseOffset + offset + 1]
+        const msb = this.array[offset];
+        const lsb = this.array[offset + 1]
         return msb << 8 + lsb;
     }
 
     get PC(): number {
-        return this.getWord(this.baseOffset + Chip8Memory.PC_OFFSET)
+        return this.getWord(Chip8Memory.PC_OFFSET)
     }
 
     get SP(): number {
-        return this.getWord(this.baseOffset + Chip8Memory.SP_OFFSET);
+        return this.getWord(Chip8Memory.SP_OFFSET);
     }
 
     get I(): number {
-        return this.getWord(this.baseOffset + Chip8Memory.I_OFFSET);
+        return this.getWord(Chip8Memory.I_OFFSET);
     }
 
     get stack(): Uint16Array {
-        return new Uint16Array(this.array.buffer, this.baseOffset + Chip8Memory.STACK_OFFSET, Chip8Memory.STACK_SIZE);
+        return new Uint16Array(this.array.buffer, this.baseOffset + Chip8Memory.STACK_OFFSET, Chip8Memory.STACK_SIZE / 2);
     }
 
     get registers(): Uint8Array {

@@ -19,15 +19,15 @@
 
 	export let pixelSize: number;
 	export let buffer: Uint8Array;
-    console.log(buffer);
+	console.log(buffer);
 
 	let canvas: HTMLCanvasElement;
 	let ctx: CanvasRenderingContext2D;
 
 	onMount(() => {
-        canvas.tabIndex = 1;
-		canvas.width = pixelSize * 65;
-		canvas.height = pixelSize * 33;
+		canvas.tabIndex = 1;
+		canvas.width = pixelSize * 64;
+		canvas.height = pixelSize * 32;
 		ctx = canvas.getContext('2d')!;
 
 		let frame: number;
@@ -55,11 +55,14 @@
 	}
 </script>
 
-<canvas bind:this={canvas} on:keydown on:keyup on:blur />
+<canvas bind:this={canvas} on:keydown on:keyup on:focus on:blur />
 
 <style>
-    canvas {
-        border: solid 15px black;
-    }
+	canvas:focus {
+		border: solid 15px black;
+	}
 
+	canvas {
+		border: solid 15px red;
+	}
 </style>
