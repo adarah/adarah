@@ -19,11 +19,6 @@ pub const Cpu = struct {
     // Memory
     mem: *[4096]u8,
 
-    // Special Registers
-    I: u16 = 0,
-    PC: u16 = 0x1FC,
-    SP: u16 = 0xECF,
-
     // Helpers
     keypad: *Keypad,
     sound_timer: *Timer,
@@ -33,17 +28,62 @@ pub const Cpu = struct {
     // Quirks
     shift_quirk: bool,
     register_quirk: bool,
+    wrap_quirk: bool,
 
     const Self = @This();
+    // Special register addresses
+    const PC_ADDR = 0x50;
+    const SP_ADDR = 0x52;
+    const I_ADDR = 0x54;
 
     pub fn init(options: CpuOptions) Self {
         var prng = rand.DefaultPrng.init(options.seed);
+        options.memory[PC_ADDR .. I_ADDR + 2].* = .{ 0x01, 0xFC, 0x0E, 0xCF, 0x00, 0x00 };
 
-        return Self{ .mem = options.memory, .prng = prng, .keypad = options.keypad, .sound_timer = options.sound_timer, .delay_timer = options.delay_timer, .shift_quirk = options.shift_quirk, .register_quirk = options.register_quirk };
+        return Self{
+            .mem = options.memory,
+            .prng = prng,
+            .keypad = options.keypad,
+            .sound_timer = options.sound_timer,
+            .delay_timer = options.delay_timer,
+            .shift_quirk = options.shift_quirk,
+            .register_quirk = options.register_quirk,
+            .wrap_quirk = true,
+        };
     }
 
-    // PC, SP, and I are stored in the memory for convenience
-    // pub inline fn PC(self: *Self) u16 {}
+    inline fn getWord(self: *Self, address: u16) u16 {
+        return std.mem.readIntBig(u16, self.mem[address..][0..2]);
+    }
+
+    inline fn setWord(self: *Self, address: u16, value: u16) void {
+        std.mem.writeIntBig(u16, self.mem[address..][0..2], value);
+    }
+
+    // PC, SP, and I are stored in the memory for convenience in exporting them to js
+    pub inline fn PC(self: *Self) u16 {
+        return self.getWord(PC_ADDR);
+    }
+
+    inline fn setPC(self: *Self, address: u16) void {
+        self.setWord(PC_ADDR, address);
+    }
+
+    pub inline fn SP(self: *Self) u16 {
+        return self.getWord(SP_ADDR);
+    }
+
+    inline fn setSP(self: *Self, address: u16) void {
+        self.setWord(SP_ADDR, address);
+    }
+
+    pub inline fn I(self: *Self) u16 {
+        return self.getWord(I_ADDR);
+    }
+
+    inline fn setI(self: *Self, address: u16) void {
+        self.setWord(I_ADDR, address);
+    }
 
     pub inline fn stack(self: *Self) *[48]u8 {
         return self.mem[0xEA0..0xED0];
@@ -53,52 +93,54 @@ pub const Cpu = struct {
         return self.mem[0xEF0..0xF00];
     }
 
-    pub inline fn display_buffer(self: *Self) *[256]u8 {
+    pub inline fn displayBuffer(self: *Self) *[256]u8 {
         return self.mem[0xF00..];
     }
 
     inline fn stackPush(self: *Self, address: u16) void {
         // Chip-8 is big endian, so the most significant byte goes in a lower memory address
-        self.mem[self.SP - 1] = @truncate(u8, @shrExact(address & 0xFF00, 8));
-        self.mem[self.SP] = @truncate(u8, address);
-        self.SP -= 2;
+        const sp = self.SP();
+        self.setWord(sp - 1, address);
+        self.setSP(sp - 2);
     }
 
     inline fn stackPop(self: *Self) u16 {
         // Chip-8 is big endian, so the most significant byte goes in a lower memory address
-        const msb = @as(u16, self.mem[self.SP + 1]);
-        const lsb = self.mem[self.SP + 2];
-        self.SP += 2;
-        return @shlExact(msb, 8) + lsb;
+        const sp = self.SP();
+        const stack_top = self.getWord(sp + 1);
+        self.setSP(sp + 2);
+        return stack_top;
     }
 
     inline fn stackPeek(self: *Self) u16 {
         // SP always points to next available position, so SP+1 contains the top of the stack
         // (remember, stacks grow downwards)
-        const msb = @as(u16, self.mem[self.SP + 1]);
-        const lsb = self.mem[self.SP + 2];
-        return @shlExact(msb, 8) + lsb;
+        return self.getWord(self.SP() + 1);
+    }
+
+    inline fn incrementPc(self: *Self) void {
+        self.setPC(self.PC() + 2);
     }
 
     pub fn fetchDecodeExecute(self: *Self) void {
-        const first = self.mem[self.PC];
-        const second = self.mem[self.PC + 1];
+        const pc = self.PC();
 
-        const a: u4 = @truncate(u4, @shrExact(first & 0xF0, 4));
-        const b: u4 = @truncate(u4, first);
-        const c: u4 = @truncate(u4, @shrExact(second & 0xF0, 4));
-        const d: u4 = @truncate(u4, second);
+        const nibbles = std.mem.bytesAsSlice(u4, self.mem[pc..][0..2]);
+        const a: u4 = nibbles[0];
+        const b: u4 = nibbles[1];
+        const c: u4 = nibbles[2];
+        const d: u4 = nibbles[3];
 
-        const nnn: u16 = @shlExact(@as(u16, b), 8) + second;
+        const lsb = self.mem[pc + 1];
+        const nnn: u16 = @shlExact(@as(u16, b), 8) + lsb;
         {
-            const instruction: [2]u8 = [_]u8{ first, second };
-            std.log.debug("fetched: {}", .{fmt.fmtSliceHexUpper(&instruction)});
-            std.log.debug("PC: {}", .{self.PC});
+            std.log.debug("fetched: {}", .{fmt.fmtSliceHexUpper(self.mem[pc .. pc + 2])});
+            std.log.debug("PC: {}", .{pc});
         }
 
         switch (a) {
             0 => {
-                switch (second) {
+                switch (lsb) {
                     0xE0 => self.clearScreen(),
                     0xEE => self.returnFromSubroutine(),
                     else => self.syscall(nnn) catch |err| {
@@ -108,11 +150,11 @@ pub const Cpu = struct {
             },
             1 => self.jump(nnn),
             2 => self.callSubroutine(nnn),
-            3 => self.skipIfEqualLiteral(b, second),
-            4 => self.skipIfNotEqualLiteral(b, second),
+            3 => self.skipIfEqualLiteral(b, lsb),
+            4 => self.skipIfNotEqualLiteral(b, lsb),
             5 => self.skipIfEqual(b, c),
-            6 => self.storeLiteral(b, second),
-            7 => self.addLiteral(b, second),
+            6 => self.storeLiteral(b, lsb),
+            7 => self.addLiteral(b, lsb),
             8 => {
                 switch (d) {
                     0 => self.store(b, c),
@@ -124,33 +166,33 @@ pub const Cpu = struct {
                     6 => self.shiftRight(b, c),
                     7 => self.subStore(b, c),
                     0xE => self.shiftLeft(b, c),
-                    else => panic("unknown instruction: {}", .{fmt.fmtSliceHexUpper(self.mem[self.PC .. self.PC + 2])}),
+                    else => panic("unknown instruction: {}", .{fmt.fmtSliceHexUpper(self.mem[pc .. pc + 2])}),
                 }
             },
             9 => self.skipIfNotEqual(b, c),
-            0xA => self.storeAddress(nnn),
+            0xA => self.storeAddressI(nnn),
             0xB => self.jumpWithOffset(nnn),
-            0xC => self.genRandom(b, second),
+            0xC => self.genRandom(b, lsb),
             0xD => self.draw(b, c, d),
             0xE => {
-                switch (second) {
+                switch (lsb) {
                     0x9E => self.skipIfPressed(b),
                     0xA1 => self.skipIfNotPressed(b),
-                    else => panic("unknown instruction: {}", .{fmt.fmtSliceHexUpper(self.mem[self.PC .. self.PC + 2])}),
+                    else => panic("unknown instruction: {}", .{fmt.fmtSliceHexUpper(self.mem[pc .. pc + 2])}),
                 }
             },
             0xF => {
-                switch (second) {
+                switch (lsb) {
                     0x07 => self.storeDelayTimer(b),
                     0x0A => self.waitForKeypress(b),
                     0x15 => self.setDelayTimer(b),
                     0x18 => self.setSoundTimer(b),
-                    0x1E => self.addToI(b),
+                    0x1E => self.addI(b),
                     0x29 => self.setSprite(b),
                     0x33 => self.setBcd(b),
                     0x55 => self.dumpRegisters(b),
                     0x65 => self.restoreRegisters(b),
-                    else => panic("unknown instruction: {}", .{fmt.fmtSliceHexUpper(self.mem[self.PC .. self.PC + 2])}),
+                    else => panic("unknown instruction: {}", .{fmt.fmtSliceHexUpper(self.mem[pc .. pc + 2])}),
                 }
             },
         }
@@ -163,101 +205,101 @@ pub const Cpu = struct {
             0x004B => {}, // This machine code subroutine just turns on the display, so we do't have to do anything
             else => return error.NotImplemented,
         }
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn callSubroutine(self: *Self, address: u16) void {
-        self.stackPush(self.PC + 2);
-        self.PC = address;
+        self.stackPush(self.PC() + 2);
+        self.setPC(address);
     }
 
     pub fn clearScreen(self: *Self) void {
-        for (self.display_buffer()) |*b| {
+        for (self.displayBuffer()) |*b| {
             b.* = 0;
         }
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn returnFromSubroutine(self: *Self) void {
-        self.PC = self.stackPop();
+        self.setPC(self.stackPop());
     }
 
     pub fn jump(self: *Self, address: u16) void {
-        self.PC = address;
+        self.setPC(address);
     }
 
     pub fn skipIfEqualLiteral(self: *Self, register: u4, value: u8) void {
         const V = self.registers();
         if (V[register] == value) {
-            self.PC += 2;
+            self.incrementPc();
         }
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn skipIfNotEqualLiteral(self: *Self, register: u4, value: u8) void {
         const V = self.registers();
         if (V[register] != value) {
-            self.PC += 2;
+            self.incrementPc();
         }
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn skipIfEqual(self: *Self, registerX: u4, registerY: u4) void {
         const V = self.registers();
         if (V[registerX] == V[registerY]) {
-            self.PC += 2;
+            self.incrementPc();
         }
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn storeLiteral(self: *Self, register: u4, value: u8) void {
         const V = self.registers();
         V[register] = value;
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn addLiteral(self: *Self, register: u4, value: u8) void {
         const V = self.registers();
         V[register] +%= value;
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn store(self: *Self, registerX: u4, registerY: u4) void {
         const V = self.registers();
         V[registerX] = V[registerY];
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn bitwiseOr(self: *Self, registerX: u4, registerY: u4) void {
         const V = self.registers();
         V[registerX] |= V[registerY];
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn bitwiseAnd(self: *Self, registerX: u4, registerY: u4) void {
         const V = self.registers();
         V[registerX] &= V[registerY];
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn bitwiseXor(self: *Self, registerX: u4, registerY: u4) void {
         const V = self.registers();
         V[registerX] ^= V[registerY];
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn add(self: *Self, registerX: u4, registerY: u4) void {
         const V = self.registers();
         const overflow = @addWithOverflow(u8, V[registerX], V[registerY], &V[registerX]);
         V[0xF] = @boolToInt(overflow);
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn sub(self: *Self, registerX: u4, registerY: u4) void {
         const V = self.registers();
         const underflow = @subWithOverflow(u8, V[registerX], V[registerY], &V[registerX]);
         V[0xF] = @boolToInt(!underflow);
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn shiftRight(self: *Self, registerX: u4, registerY: u4) void {
@@ -269,14 +311,14 @@ pub const Cpu = struct {
             V[0xF] = V[registerY] & 1;
             V[registerX] = V[registerY] >> 1;
         }
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn subStore(self: *Self, registerX: u4, registerY: u4) void {
         const V = self.registers();
         const underflow = @subWithOverflow(u8, V[registerY], V[registerX], &V[registerX]);
         V[0xF] = @boolToInt(!underflow);
-        self.PC += 2;
+        self.incrementPc();
     }
 
     // TODO: Implement VF setting alternative behaviour
@@ -289,32 +331,32 @@ pub const Cpu = struct {
             overflow = @shlWithOverflow(u8, V[registerY], 1, &V[registerX]);
         }
         V[0xF] = @boolToInt(overflow);
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn skipIfNotEqual(self: *Self, registerX: u4, registerY: u4) void {
         const V = self.registers();
         if (V[registerX] != V[registerY]) {
-            self.PC += 2;
+            self.incrementPc();
         }
-        self.PC += 2;
+        self.incrementPc();
     }
 
-    pub fn storeAddress(self: *Self, address: u16) void {
-        self.I = address;
-        self.PC += 2;
+    pub fn storeAddressI(self: *Self, address: u16) void {
+        self.setI(address);
+        self.incrementPc();
     }
 
     pub fn jumpWithOffset(self: *Self, address: u16) void {
         const V = self.registers();
-        self.PC = V[0] + address;
+        self.setPC(V[0] + address);
     }
 
     pub fn genRandom(self: *Self, register: u4, mask: u8) void {
         const V = self.registers();
         const r = self.prng.random().int(u8);
         V[register] = r & mask;
-        self.PC += 2;
+        self.incrementPc();
     }
 
     // TODO: Implement alternative wrapping behaviour
@@ -329,6 +371,7 @@ pub const Cpu = struct {
     // If any bit is ever unset, we set the VF register.
     pub fn draw(self: *Self, registerX: u4, registerY: u4, height: u8) void {
         const V = self.registers();
+        const _I = self.I();
         const y = @intCast(u8, @mod(@as(usize, V[registerY]) * 8, 256)); // 31*8=248 at most
         const x: usize = V[registerX];
         // In most situations, drawing something on the screen will require applying a mask to two differente bytes
@@ -339,12 +382,12 @@ pub const Cpu = struct {
         const x_first = @mod(x, 64) / 8; // 7 at most
         const x_second = @mod(x + 7, 64) / 8; // 7 at most
         const bits_first = @intCast(u3, @mod(@mod(x, 64), 8)); // 0-7
-        const display = self.display_buffer();
+        const display = self.displayBuffer();
         V[0xF] = 0;
         var i: usize = 0;
         while (i < height) : (i += 1) {
             const offset = 8 * i;
-            const sprite_data = self.mem[self.I + i];
+            const sprite_data = self.mem[_I + i];
             const masks = Cpu.splitMask(sprite_data, bits_first);
             const pos_first = @mod(y + x_first + offset, 256);
             const pos_second = @mod(y + x_second + offset, 256);
@@ -358,7 +401,7 @@ pub const Cpu = struct {
             display[pos_first] ^= masks.left;
             display[pos_second] ^= masks.right;
         }
-        self.PC += 2;
+        self.incrementPc();
     }
 
     // splitMask splits a mask in two, leaving 8-N bits in the left mask, and N bits in the right mask
@@ -376,24 +419,24 @@ pub const Cpu = struct {
         const V = self.registers();
         const key = @intCast(u4, V[register]);
         if (self.keypad.isPressed(key)) {
-            self.PC += 2;
+            self.incrementPc();
         }
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn skipIfNotPressed(self: *Self, register: u4) void {
         const V = self.registers();
         const key = @intCast(u4, V[register]);
         if (!self.keypad.isPressed(key)) {
-            self.PC += 2;
+            self.incrementPc();
         }
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn storeDelayTimer(self: *Self, register: u4) void {
         const V = self.registers();
         V[register] = self.delay_timer.value;
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn waitForKeypress(self: *Self, register: u4) void {
@@ -402,13 +445,13 @@ pub const Cpu = struct {
         std.log.debug("got key! {}", .{key});
         const V = self.registers();
         V[register] = key;
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn setDelayTimer(self: *Self, register: u4) void {
         const V = self.registers();
         self.delay_timer.set(V[register]);
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn setSoundTimer(self: *Self, register: u4) void {
@@ -420,52 +463,55 @@ pub const Cpu = struct {
             val = 0;
         }
         self.sound_timer.set(val);
-        self.PC += 2;
+        self.incrementPc();
     }
 
-    pub fn addToI(self: *Self, register: u4) void {
+    pub fn addI(self: *Self, register: u4) void {
         const V = self.registers();
-        self.I += V[register];
-        self.PC += 2;
+        self.setI(self.I() + V[register]);
+        self.incrementPc();
     }
 
     pub fn setSprite(self: *Self, register: u4) void {
         const V = self.registers();
-        self.I = V[register] * 5;
-        self.PC += 2;
+        self.setI(V[register] * 5);
+        self.incrementPc();
     }
 
     pub fn setBcd(self: *Self, register: u4) void {
         const V = self.registers();
+        const _I = self.I();
         const val = V[register];
-        self.mem[self.I] = val / 100;
-        self.mem[self.I + 1] = @mod(val, 100) / 10;
-        self.mem[self.I + 2] = @mod(val, 10);
-        self.PC += 2;
+        self.mem[_I] = val / 100;
+        self.mem[_I + 1] = @mod(val, 100) / 10;
+        self.mem[_I + 2] = @mod(val, 10);
+        self.incrementPc();
     }
 
     pub fn dumpRegisters(self: *Self, register: u4) void {
         const V = self.registers();
+        const _I = self.I();
         var i: usize = 0;
         while (i <= register) : (i += 1) {
-            self.mem[self.I + i] = V[i];
+            self.mem[_I + i] = V[i];
         }
         if (!self.register_quirk) {
-            self.I += register + 1;
+            self.setI(_I + register + 1);
         }
-        self.PC += 2;
+        self.incrementPc();
     }
 
     pub fn restoreRegisters(self: *Self, register: u4) void {
         const V = self.registers();
+        const _I = self.I();
         var i: usize = 0;
         while (i <= register) : (i += 1) {
-            V[i] = self.mem[self.I + i];
+            V[i] = self.mem[_I + i];
         }
         if (!self.register_quirk) {
-            self.I += register + 1;
+            self.setI(_I + register + 1);
         }
-        self.PC += 2;
+        self.incrementPc();
     }
 };
 
@@ -498,21 +544,21 @@ test "Cpu makes syscall (0NNN)" {
     cpu.syscall(0x004B) catch |err| {
         panic("expected this syscall call to be implemented, got {}", .{err});
     };
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
     try expectError(error.NotImplemented, cpu.syscall(0x300));
 }
 
 test "Cpu clears screens (00E0)" {
     var cpu = getTestCpu();
-    for (cpu.display_buffer()) |*b, i| {
+    for (cpu.displayBuffer()) |*b, i| {
         b.* = @intCast(u8, i);
     }
 
     cpu.clearScreen();
-    for (cpu.display_buffer()) |b| {
+    for (cpu.displayBuffer()) |b| {
         try expectEqual(u8, 0, b);
     }
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu returns from subroutine (00EE)" {
@@ -521,35 +567,35 @@ test "Cpu returns from subroutine (00EE)" {
     cpu.stackPush(0x800);
 
     cpu.returnFromSubroutine();
-    try expectEqual(u16, 0xECD, cpu.SP);
-    try expectEqual(u16, 0x800, cpu.PC);
+    try expectEqual(u16, 0xECD, cpu.SP());
+    try expectEqual(u16, 0x800, cpu.PC());
 
     cpu.returnFromSubroutine();
-    try expectEqual(u16, 0xECF, cpu.SP);
-    try expectEqual(u16, 0x500, cpu.PC);
+    try expectEqual(u16, 0xECF, cpu.SP());
+    try expectEqual(u16, 0x500, cpu.PC());
 }
 
 test "Cpu jumps to address (1NNN)" {
     var cpu = getTestCpu();
 
     cpu.jump(0x300);
-    try expectEqual(u16, 0x300, cpu.PC);
+    try expectEqual(u16, 0x300, cpu.PC());
 
     cpu.jump(0x500);
-    try expectEqual(u16, 0x500, cpu.PC);
+    try expectEqual(u16, 0x500, cpu.PC());
 }
 
 test "Cpu calls subroutine (2NNN)" {
     var cpu = getTestCpu();
 
     cpu.callSubroutine(0x300);
-    try expectEqual(u16, 0x300, cpu.PC);
-    try expectEqual(u16, 0xECD, cpu.SP);
+    try expectEqual(u16, 0x300, cpu.PC());
+    try expectEqual(u16, 0xECD, cpu.SP());
     try expectEqual(u16, 0x1FE, cpu.stackPeek());
 
     cpu.callSubroutine(0x500);
-    try expectEqual(u16, 0x500, cpu.PC);
-    try expectEqual(u16, 0xECB, cpu.SP);
+    try expectEqual(u16, 0x500, cpu.PC());
+    try expectEqual(u16, 0xECB, cpu.SP());
     try expectEqual(u16, 0x302, cpu.stackPeek());
 }
 
@@ -560,10 +606,10 @@ test "Cpu skips next instruction if VX equals literal (3XNN)" {
     V[0xA] = 0xFF;
 
     cpu.skipIfEqualLiteral(0xA, 0xFF);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 
     cpu.skipIfEqualLiteral(0xA, 0xAB);
-    try expectEqual(u16, 0x202, cpu.PC);
+    try expectEqual(u16, 0x202, cpu.PC());
 }
 
 test "Cpu skips next instruction if VX not equals literal (4XNN)" {
@@ -573,10 +619,10 @@ test "Cpu skips next instruction if VX not equals literal (4XNN)" {
     V[0xA] = 0xFF;
 
     cpu.skipIfNotEqualLiteral(0xA, 0xBC);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 
     cpu.skipIfNotEqualLiteral(0xA, 0xFF);
-    try expectEqual(u16, 0x202, cpu.PC);
+    try expectEqual(u16, 0x202, cpu.PC());
 }
 
 test "Cpu skips next instruction if VX equals VY (5XY0)" {
@@ -587,12 +633,12 @@ test "Cpu skips next instruction if VX equals VY (5XY0)" {
     V[0xB] = 0xFF;
 
     cpu.skipIfEqual(0xA, 0xB);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 
     V[0xB] = 0x21;
 
     cpu.skipIfEqual(0xA, 0xB);
-    try expectEqual(u16, 0x202, cpu.PC);
+    try expectEqual(u16, 0x202, cpu.PC());
 }
 
 test "Cpu stores literal into register (6XNN)" {
@@ -601,11 +647,11 @@ test "Cpu stores literal into register (6XNN)" {
 
     cpu.storeLiteral(0xA, 0xFF);
     try expectEqual(u8, 0xFF, V[0xA]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 
     cpu.storeLiteral(0xC, 0xCC);
     try expectEqual(u8, 0xCC, V[0xC]);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 }
 
 test "Cpu adds literal into register (7XNN)" {
@@ -614,12 +660,12 @@ test "Cpu adds literal into register (7XNN)" {
 
     cpu.addLiteral(0xA, 0xFA);
     try expectEqual(u8, 0xFA, V[0xA]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 
     // Overflows
     cpu.addLiteral(0xA, 0x06);
     try expectEqual(u8, 0x00, V[0xA]);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 }
 
 test "Cpu stores value from VY into VX (8XY0)" {
@@ -630,7 +676,7 @@ test "Cpu stores value from VY into VX (8XY0)" {
 
     cpu.store(0xA, 0xB);
     try expectEqual(u8, 0xBB, V[0xA]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu bitwise ORs VX and VY (8XY1)" {
@@ -641,7 +687,7 @@ test "Cpu bitwise ORs VX and VY (8XY1)" {
     V[0xB] = 0b1001;
     cpu.bitwiseOr(0xA, 0xB);
     try expectEqual(u8, 0b1111, V[0xA]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu bitwise ANDs VX and VY (8XY2)" {
@@ -652,7 +698,7 @@ test "Cpu bitwise ANDs VX and VY (8XY2)" {
     V[0xB] = 0b1001;
     cpu.bitwiseAnd(0xA, 0xB);
     try expectEqual(u8, 0b0000, V[0xA]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu bitwise XORs VX and VY (8XY3)" {
@@ -663,7 +709,7 @@ test "Cpu bitwise XORs VX and VY (8XY3)" {
     V[0xB] = 0b1001;
     cpu.bitwiseXor(0xA, 0xB);
     try expectEqual(u8, 0b0011, V[0xA]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu adds registers VX and VY and sets VF if overflow (8XY4)" {
@@ -676,17 +722,17 @@ test "Cpu adds registers VX and VY and sets VF if overflow (8XY4)" {
     cpu.add(0xA, 0xB);
     try expectEqual(u8, 0xFA, V[0xA]);
     try expectEqual(u8, 0, V[0xF]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 
     cpu.add(0xA, 0xB);
     try expectEqual(u8, 0x04, V[0xA]);
     try expectEqual(u8, 1, V[0xF]);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 
     cpu.add(0xA, 0xB);
     try expectEqual(u8, 0xE, V[0xA]);
     try expectEqual(u8, 0, V[0xF]);
-    try expectEqual(u16, 0x202, cpu.PC);
+    try expectEqual(u16, 0x202, cpu.PC());
 }
 
 test "Cpu subs registers VX and VY and sets VF if no underflow (8XY5)" {
@@ -699,17 +745,17 @@ test "Cpu subs registers VX and VY and sets VF if no underflow (8XY5)" {
     cpu.sub(0xA, 0xB);
     try expectEqual(u8, 0x06, V[0xA]);
     try expectEqual(u8, 1, V[0xF]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 
     cpu.sub(0xA, 0xB);
     try expectEqual(u8, 0xFD, V[0xA]);
     try expectEqual(u8, 0, V[0xF]);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 
     cpu.sub(0xA, 0xB);
     try expectEqual(u8, 0xF4, V[0xA]);
     try expectEqual(u8, 1, V[0xF]);
-    try expectEqual(u16, 0x202, cpu.PC);
+    try expectEqual(u16, 0x202, cpu.PC());
 }
 
 test "Cpu right shifts VY into VX and sets VF to the LSB (8XY6)" {
@@ -724,14 +770,14 @@ test "Cpu right shifts VY into VX and sets VF to the LSB (8XY6)" {
     try expectEqual(u8, 0b0110, V[0xA]);
     try expectEqual(u8, 0b1101, V[0xB]);
     try expectEqual(u8, 1, V[0xF]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 
     V[0xB] = 0b0010;
     cpu.shiftRight(0xA, 0xB);
     try expectEqual(u8, 0b0001, V[0xA]);
     try expectEqual(u8, 0b0010, V[0xB]);
     try expectEqual(u8, 0, V[0xF]);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 }
 
 test "Cpu right shifts VX into itself if quirk is enabled" {
@@ -751,14 +797,14 @@ test "Cpu right shifts VX into itself if quirk is enabled" {
     try expectEqual(u8, 0b0110, V[0xA]);
     try expectEqual(u8, 0b1111, V[0xB]);
     try expectEqual(u8, 1, V[0xF]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 
     V[0xA] = 0b0010;
     cpu.shiftRight(0xA, 0xB);
     try expectEqual(u8, 0b0001, V[0xA]);
     try expectEqual(u8, 0b1111, V[0xB]);
     try expectEqual(u8, 0, V[0xF]);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 }
 
 test "Cpu sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
@@ -771,19 +817,19 @@ test "Cpu sets VX to 'VY - VX' and sets VF if no underflow (8XY7)" {
     cpu.subStore(0xA, 0xB);
     try expectEqual(u8, 0x01, V[0xA]);
     try expectEqual(u8, 1, V[0xF]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 
     V[0xA] = 0xC;
     cpu.subStore(0xA, 0xB);
     try expectEqual(u8, 0xFE, V[0xA]);
     try expectEqual(u8, 0, V[0xF]);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 
     V[0xA] = 0x3;
     cpu.subStore(0xA, 0xB);
     try expectEqual(u8, 0x07, V[0xA]);
     try expectEqual(u8, 1, V[0xF]);
-    try expectEqual(u16, 0x202, cpu.PC);
+    try expectEqual(u16, 0x202, cpu.PC());
 }
 
 test "Cpu left shifts VY into VX and sets VF to the MSB (8XYE)" {
@@ -797,14 +843,14 @@ test "Cpu left shifts VY into VX and sets VF to the MSB (8XYE)" {
     try expectEqual(u8, 0b10111110, V[0xA]);
     try expectEqual(u8, 0b11011111, V[0xB]);
     try expectEqual(u8, 1, V[0xF]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 
     V[0xB] = 0b00101111;
     cpu.shiftLeft(0xA, 0xB);
     try expectEqual(u8, 0b01011110, V[0xA]);
     try expectEqual(u8, 0b00101111, V[0xB]);
     try expectEqual(u8, 0, V[0xF]);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 }
 
 test "Cpu left shifts VX into itself if quirk is enabled" {
@@ -824,14 +870,14 @@ test "Cpu left shifts VX into itself if quirk is enabled" {
     try expectEqual(u8, 0b10111110, V[0xA]);
     try expectEqual(u8, 0, V[0xB]);
     try expectEqual(u8, 1, V[0xF]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 
     V[0xA] = 0b00101111;
     cpu.shiftLeft(0xA, 0xB);
     try expectEqual(u8, 0b01011110, V[0xA]);
     try expectEqual(u8, 0, V[0xB]);
     try expectEqual(u8, 0, V[0xF]);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 }
 
 test "Cpu skips if not equal register (9XY0)" {
@@ -842,19 +888,19 @@ test "Cpu skips if not equal register (9XY0)" {
     V[0xB] = 0xA;
 
     cpu.skipIfNotEqual(0xA, 0xB);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 
     V[0xB] = 0x5;
     cpu.skipIfNotEqual(0xA, 0xB);
-    try expectEqual(u16, 0x202, cpu.PC);
+    try expectEqual(u16, 0x202, cpu.PC());
 }
 
 test "Cpu stores memory address into I (ANNN)" {
     var cpu = getTestCpu();
 
-    cpu.storeAddress(0x300);
-    try expectEqual(u16, 0x300, cpu.I);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    cpu.storeAddressI(0x300);
+    try expectEqual(u16, 0x300, cpu.I());
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu jumps to NNN plus V0 (BNNN)" {
@@ -864,7 +910,7 @@ test "Cpu jumps to NNN plus V0 (BNNN)" {
     V[0] = 0x10;
 
     cpu.jumpWithOffset(0x400);
-    try expectEqual(u16, 0x410, cpu.PC);
+    try expectEqual(u16, 0x410, cpu.PC());
 }
 
 test "Cpu sets VX to a random number with mask (CXNN)" {
@@ -874,45 +920,45 @@ test "Cpu sets VX to a random number with mask (CXNN)" {
 
     cpu.genRandom(0xA, 0b11110000);
     try expectEqual(u8, 0b11010000, V[0xA]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu draws sprite (DXYN)" {
     var cpu = getTestCpu();
     const V = cpu.registers();
-    const s = cpu.display_buffer();
+    const s = cpu.displayBuffer();
 
     // Draw a 0 at (0, 0).
     // No offset, simplest case.
-    cpu.I = 0;
+    cpu.setI(0);
     V[0xA] = 0;
     V[0xB] = 0;
     cpu.draw(0xA, 0xB, 5);
 
     // Draw a 1 at (16, 0).
     // Has X offset at multiple of 8.
-    cpu.I = 5;
+    cpu.setI(5);
     V[0xA] = 16;
     V[0xB] = 0;
     cpu.draw(0xA, 0xB, 5);
 
     // Draw a 2 at (0, 16).
     // Has Y offset at multiple of 8.
-    cpu.I = 10;
+    cpu.setI(10);
     V[0xA] = 0;
     V[0xB] = 16;
     cpu.draw(0xA, 0xB, 5);
 
     // Draw a 3 at (16, 16).
     // Has X and Y offset at multiples of 8.
-    cpu.I = 15;
+    cpu.setI(15);
     V[0xA] = 16;
     V[0xB] = 16;
     cpu.draw(0xA, 0xB, 5);
 
     // Draw a 5 at (25, 0).
     // Has X and Y offsets, but X is not a multiple of 8
-    cpu.I = 25;
+    cpu.setI(25);
     V[0xA] = 25;
     V[0xB] = 0;
     cpu.draw(0xA, 0xB, 5);
@@ -920,21 +966,21 @@ test "Cpu draws sprite (DXYN)" {
     // Draw a 9 at (30, 16).
     // Has X and Y offsets, neither of which are multiples of X
     // The drawing spans 2 separate bytes
-    cpu.I = 45;
+    cpu.setI(45);
     V[0xA] = 30;
     V[0xB] = 16;
     cpu.draw(0xA, 0xB, 5);
 
     // Draw a 7 at (62, 8).
     // This drawing wraps around the X axis.
-    cpu.I = 35;
+    cpu.setI(35);
     V[0xA] = 62;
     V[0xB] = 8;
     cpu.draw(0xA, 0xB, 5);
 
     // Draw a 8 at (8, 30).
     // This drawing wraps around the Y axis.
-    cpu.I = 40;
+    cpu.setI(40);
     V[0xA] = 8;
     V[0xB] = 30;
     cpu.draw(0xA, 0xB, 5);
@@ -1009,14 +1055,14 @@ test "Cpu draws sprite (DXYN)" {
     try expectEqual(u8, 0xF0, s[17]);
     try expectEqual(u8, 0xF0, s[241]);
     try expectEqual(u8, 0x90, s[249]);
-    try expectEqual(u16, 0x20C, cpu.PC);
+    try expectEqual(u16, 0x20C, cpu.PC());
 }
 
 test "Cpu sets VF if drawing erases any pixels" {
     var cpu = getTestCpu();
     const V = cpu.registers();
 
-    cpu.I = 0;
+    cpu.setI(0);
     V[0xF] = 1;
 
     // Draw unsets VF if no collisions happen
@@ -1051,11 +1097,11 @@ test "Cpu skips next instruction if key in VX is pressed (EX9E)" {
 
     V[0xA] = 7;
     cpu.skipIfPressed(0xA);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 
     V[0xA] = 8;
     cpu.skipIfPressed(0xA);
-    try expectEqual(u16, 0x202, cpu.PC);
+    try expectEqual(u16, 0x202, cpu.PC());
 }
 
 test "Cpu skips next instruction f key in VX is not pressed (EXA1)" {
@@ -1066,11 +1112,11 @@ test "Cpu skips next instruction f key in VX is not pressed (EXA1)" {
 
     V[0xA] = 7;
     cpu.skipIfNotPressed(0xA);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 
     V[0xA] = 8;
     cpu.skipIfNotPressed(0xA);
-    try expectEqual(u16, 0x202, cpu.PC);
+    try expectEqual(u16, 0x202, cpu.PC());
 }
 
 test "Cpu stores the value of the delay timer in VX (FX07)" {
@@ -1080,7 +1126,7 @@ test "Cpu stores the value of the delay timer in VX (FX07)" {
     cpu.delay_timer.value = 10;
     cpu.storeDelayTimer(0xA);
     try expectEqual(u8, 10, V[0xA]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu waits for keypress and stores result in VX (FX0A)" {
@@ -1092,7 +1138,7 @@ test "Cpu waits for keypress and stores result in VX (FX0A)" {
     cpu.keypad.releaseKey(5);
     nosuspend await frame;
     try expectEqual(u8, 5, V[0xA]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 
     frame = async cpu.waitForKeypress(0xC);
     cpu.keypad.pressKey(5);
@@ -1102,7 +1148,7 @@ test "Cpu waits for keypress and stores result in VX (FX0A)" {
     nosuspend await frame;
 
     try expectEqual(u8, 6, V[0xC]);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 }
 
 test "Cpu sets delay timer to value found in VX (FX15)" {
@@ -1112,7 +1158,7 @@ test "Cpu sets delay timer to value found in VX (FX15)" {
     V[0xA] = 10;
     cpu.setDelayTimer(0xA);
     try expectEqual(u8, 10, cpu.delay_timer.value);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu sets sound timer to value found in VX (FX18)" {
@@ -1122,13 +1168,13 @@ test "Cpu sets sound timer to value found in VX (FX18)" {
     V[0xA] = 10;
     cpu.setSoundTimer(0xA);
     try expectEqual(u8, 10, cpu.sound_timer.value);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 
     // Setting the sound timer to values below 2 has no effect
     V[0xA] = 1;
     cpu.setSoundTimer(0xA);
     try expectEqual(u8, 0, cpu.sound_timer.value);
-    try expectEqual(u16, 0x200, cpu.PC);
+    try expectEqual(u16, 0x200, cpu.PC());
 }
 
 test "Cpu adds the value from VX into I (FX1E)" {
@@ -1136,11 +1182,11 @@ test "Cpu adds the value from VX into I (FX1E)" {
     const V = cpu.registers();
 
     V[0xA] = 5;
-    cpu.I = 10;
+    cpu.setI(10);
 
-    cpu.addToI(0xA);
-    try expectEqual(u16, 15, cpu.I);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    cpu.addI(0xA);
+    try expectEqual(u16, 15, cpu.I());
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu sets I to sprite found in VX (FX29)" {
@@ -1149,8 +1195,8 @@ test "Cpu sets I to sprite found in VX (FX29)" {
 
     V[0xA] = 5;
     cpu.setSprite(0xA);
-    try expectEqual(u16, 25, cpu.I);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 25, cpu.I());
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu stores BCD of value in VX at I (FX33)" {
@@ -1158,14 +1204,14 @@ test "Cpu stores BCD of value in VX at I (FX33)" {
     const V = cpu.registers();
 
     V[0xA] = 123;
-    cpu.I = 0x500;
+    cpu.setI(0x500);
 
     cpu.setBcd(0xA);
 
     try expectEqual(u8, 1, cpu.mem[0x500]);
     try expectEqual(u8, 2, cpu.mem[0x501]);
     try expectEqual(u8, 3, cpu.mem[0x502]);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu dumps register into memory I (FX55)" {
@@ -1177,7 +1223,7 @@ test "Cpu dumps register into memory I (FX55)" {
         V[i] = i;
     }
 
-    cpu.I = 0x500;
+    cpu.setI(0x500);
     cpu.dumpRegisters(5);
 
     i = 0;
@@ -1189,8 +1235,8 @@ test "Cpu dumps register into memory I (FX55)" {
         }
     }
 
-    try expectEqual(u16, 0x500 + 5 + 1, cpu.I);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x500 + 5 + 1, cpu.I());
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu dumps registers into memory but doesn't touch I if quirk is enabled" {
@@ -1207,7 +1253,7 @@ test "Cpu dumps registers into memory but doesn't touch I if quirk is enabled" {
         V[i] = i;
     }
 
-    cpu.I = 0x500;
+    cpu.setI(0x500);
     cpu.dumpRegisters(5);
 
     i = 0;
@@ -1219,8 +1265,8 @@ test "Cpu dumps registers into memory but doesn't touch I if quirk is enabled" {
         }
     }
 
-    try expectEqual(u16, 0x500, cpu.I);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x500, cpu.I());
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu restores registers from memory I (FX65)" {
@@ -1232,7 +1278,7 @@ test "Cpu restores registers from memory I (FX65)" {
         cpu.mem[0x500 + @as(usize, i)] = i;
     }
 
-    cpu.I = 0x500;
+    cpu.setI(0x500);
     cpu.restoreRegisters(5);
 
     while (i < 16) : (i += 1) {
@@ -1243,8 +1289,8 @@ test "Cpu restores registers from memory I (FX65)" {
         }
     }
 
-    try expectEqual(u16, 0x500 + 5 + 1, cpu.I);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x500 + 5 + 1, cpu.I());
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "Cpu restores registers from memory I but doesn't touch I if quirk is enabled" {
@@ -1261,7 +1307,7 @@ test "Cpu restores registers from memory I but doesn't touch I if quirk is enabl
         cpu.mem[0x500 + @as(usize, i)] = i;
     }
 
-    cpu.I = 0x500;
+    cpu.setI(0x500);
     cpu.restoreRegisters(5);
 
     while (i < 16) : (i += 1) {
@@ -1272,8 +1318,8 @@ test "Cpu restores registers from memory I but doesn't touch I if quirk is enabl
         }
     }
 
-    try expectEqual(u16, 0x500, cpu.I);
-    try expectEqual(u16, 0x1FE, cpu.PC);
+    try expectEqual(u16, 0x500, cpu.I());
+    try expectEqual(u16, 0x1FE, cpu.PC());
 }
 
 test "decode extracts bits correctly" {

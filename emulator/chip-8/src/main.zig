@@ -75,16 +75,11 @@ export fn onAnimationFrame(now_time_ms: c_int) void {
     while (i < num_instructions) : (i += 1) {
         global_frame = async cpu.fetchDecodeExecute();
     }
-    // const display = cpu.display_buffer();
-    // wasm.draw(display, display.len);
 }
 
 export fn timerTick() void {
     sound_timer.tick();
     delay_timer.tick();
-    // if (sound_timer.value > 0) {
-    //     wasm.playAudio();
-    // }
 }
 
 export fn getMemPtr() [*]u8 {
@@ -92,28 +87,9 @@ export fn getMemPtr() [*]u8 {
 }
 
 // Functions used by the debugger
-
 export fn debugStep() void {
     global_frame = async cpu.fetchDecodeExecute();
-
-    // const V = cpu.registers();
-    // wasm.setRegisters(cpu.PC, cpu.SP, cpu.I, V, V.len);
-
-    // const s = cpu.stack();
-    // wasm.setStack(s, s.len);
-
-    // wasm.setMem(cpu.mem, cpu.mem.len);
-
-    // const display = cpu.display_buffer();
-    // wasm.draw(display, display.len);
 }
-
-// export fn debugSetState(pc: c_uint, sp: c_uint, i_reg: c_uint, memory: [*]const u8) void {
-//     cpu.PC = @intCast(u16, pc);
-//     cpu.SP = @intCast(u16, sp);
-//     cpu.I = @intCast(u16, i_reg);
-//     std.mem.copy(u8, cpu.mem, memory[0..4096]);
-// }
 
 // This is the panic handler. Use util.panic for better convenience.
 pub fn panic(message: []const u8, trace: ?*std.builtin.StackTrace) noreturn {
