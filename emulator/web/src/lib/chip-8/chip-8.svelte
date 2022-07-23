@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
+
 	import Canvas from './canvas.svelte';
 	import { Chip8, type Chip8Quirks } from './chip-8';
 
@@ -6,7 +8,7 @@
 	export let seed: number;
 	export let clockFrequencyHz: number;
 	export let quirks: Chip8Quirks;
-	export let audio: HTMLAudioElement = new Audio('/oof.mp3');
+	export let audio: HTMLAudioElement = new Audio('/oof.ogg');
 
 	// Emulation values
 	let chip8: Chip8;
@@ -14,18 +16,25 @@
 	let SP: number;
 	let registers: Uint8Array;
 	let stack: Uint16Array;
+
+	// UI State
 	let paused: boolean = true;
+	let debug: boolean = false;
 
 	// Timers
 	let animationFrame: number;
 	let timerInterval: ReturnType<typeof setInterval>;
-	
+
 	$: resetAndLoad(gameData);
+
+	onDestroy(() => {
+		stopTimers();
+	});
 
 	async function init(): Promise<void> {
 		const [_chip8, game] = await Promise.all([
 			Chip8.init({
-				code: fetch('/chip-8.wasm'),
+				code: fetch('/chip-8.wasm.gz'),
 				audio,
 				seed,
 				clockFrequencyHz,
@@ -35,12 +44,6 @@
 		]);
 		chip8 = _chip8;
 		chip8.loadGame(game);
-		enableTimers();
-	}
-
-	function enableTimers() {
-		timerInterval = setInterval(() => chip8.timerTick(), 16.667);
-		return () => clearInterval(timerInterval);
 	}
 
 	async function resetAndLoad(gameData: Promise<Uint8Array>) {
@@ -59,23 +62,19 @@
 			stack = chip8.stack;
 		}
 		chip8.resume();
-		enableTimers();
 		animationFrame = requestAnimationFrame(loop);
+		timerInterval = setInterval(() => chip8.timerTick(), 16.667);
 		paused = false;
 	}
 
 	function pause(): void {
-		cancelAnimationFrame(animationFrame);
-		clearInterval(timerInterval);
+		stopTimers();
 		paused = true;
 	}
 
-	function toggle(): void {
-		if (paused) {
-			play();
-		} else {
-			pause();
-		}
+	function stopTimers() {
+		cancelAnimationFrame(animationFrame);
+		clearInterval(timerInterval);
 	}
 </script>
 
@@ -90,17 +89,21 @@
 		on:focus={play}
 		on:blur={pause}
 	/>
-	<button on:click={toggle}>{paused ? 'Play' : 'Pause'}</button>
 
-	<div>
-		<p>seed: {seed}</p>
-		<p>PC: {PC?.toString(16)}</p>
-		<p>Registers: {registers}</p>
-		<p>SP: {SP?.toString(16)}</p>
-		<p>Stack: {stack}</p>
-		<p>clock speed: {clockFrequencyHz}</p>
-		<p>quirks: {JSON.stringify(quirks)}</p>
-	</div>
+	<button on:click={() => (debug = !debug)}>{debug ? 'Debug' : 'Stop'}</button>
+	{#if debug}
+		<div>
+			<p>seed: {seed}</p>
+			<p>PC: {PC?.toString(16)}</p>
+			<p>Registers: {registers}</p>
+			<p>SP: {SP?.toString(16)}</p>
+			<p>Stack: {stack}</p>
+			<p>clock speed: {clockFrequencyHz}</p>
+			<p>quirks: {JSON.stringify(quirks)}</p>
+		</div>
+	{:else}
+		<button on:click={() => (paused ? play() : pause())}>{paused ? 'Play' : 'Pause'}</button>
+	{/if}
 {:catch err}
 	<p>Some error: {err}</p>
 {/await}
