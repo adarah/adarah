@@ -38,7 +38,6 @@ pub const Cpu = struct {
 
     pub fn init(options: CpuOptions) Self {
         var prng = rand.DefaultPrng.init(options.seed);
-        options.memory[PC_ADDR .. I_ADDR + 2].* = .{ 0x01, 0xFC, 0x0E, 0xCF, 0x00, 0x00 };
 
         return Self{
             .mem = options.memory,

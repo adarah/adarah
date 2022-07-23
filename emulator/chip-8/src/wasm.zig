@@ -1,15 +1,10 @@
 const std = @import("std");
 
+pub extern fn playAudio() void;
 pub extern fn consoleDebug(message: [*]const u8, length: usize) void;
 pub extern fn consoleInfo(message: [*]const u8, length: usize) void;
 pub extern fn consoleWarn(message: [*]const u8, length: usize) void;
 pub extern fn consoleError(message: [*]const u8, length: usize) void;
-
-pub extern fn draw(offset: [*]const u8, length: usize) void;
-// pub extern fn setStack(stack_buffer: [*]const u8, length: usize) void;
-// pub extern fn setRegisters(pc: c_uint, sp: c_uint, i_reg: c_uint, register_buffer: [*]const u8, length: usize) void;
-// pub extern fn setDisplay(display_buffer: [*]const u8, length: usize) void;
-// pub extern fn setMem(mem_buffer: [*]const u8, length: usize) void;
 
 pub fn debug(comptime fmt: []const u8, args: anytype) void {
     var buf: [512]u8 = undefined;

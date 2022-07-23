@@ -1,118 +1,64 @@
-<script lang="ts" context="module">
-	export interface Chip8Quirks {
-		shift: boolean;
-		register: boolean;
-		wrap: boolean;
-	}
-
-	interface Chip8Exports {
-		init(
-			seed: number,
-			startTime: number,
-			clockFrequencyHz: number,
-			shiftQuirk: boolean,
-			registerQuirk: boolean,
-			gameData: number,
-			gameLength: number
-		): void;
-		getMemPtr(): number;
-		onKeydown(keycode: number): void;
-		onKeyup(keycode: number): void;
-		onAnimationFrame(time: DOMHighResTimeStamp): void;
-		timerTick(): void;
-		getSoundTimer(): number;
-		setCurrentTime(now: DOMHighResTimeStamp): void;
-	}
-
-	function getRandomSeed() {
-		return Math.floor(Math.random() * 2147483647);
-	}
-
-	function getGameUrl(title: string): string{
-		return new URL(`/games/${title}`, import.meta.url).href;
-	}
-</script>
-
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { genEnv } from './bindings';
 	import Canvas from './canvas.svelte';
-	import { Chip8Memory } from './chip-8-memory';
+	import { Chip8, type Chip8Quirks } from './chip-8';
 
-	export let gameData: Uint8Array | Promise<Uint8Array>;
-	export let seed: number = getRandomSeed();
-	export let clockFrequencyHz: number = 500;
-	export let quirks: Chip8Quirks = {
-		shift: true,
-		register: true,
-		wrap: true
-	};
+	export let gameData: Promise<Uint8Array>;
+	export let seed: number;
+	export let clockFrequencyHz: number;
+	export let quirks: Chip8Quirks;
+	export let audio: HTMLAudioElement = new Audio('/oof.mp3');
 
-	let exports: Chip8Exports;
-	let animationFrame: number;
-	let timerInterval: ReturnType<typeof setInterval>;
-	let paused: boolean = true;
+	// Emulation values
+	let chip8: Chip8;
 	let PC: number;
 	let SP: number;
 	let registers: Uint8Array;
 	let stack: Uint16Array;
+	let paused: boolean = true;
 
-	let audio: HTMLAudioElement;
+	// Timers
+	let animationFrame: number;
+	let timerInterval: ReturnType<typeof setInterval>;
+	
+	$: resetAndLoad(gameData);
 
-	onMount(() => {
-		enableTimers();
-		audio = new Audio('/beep3.ogg');
-	});
-	async function setupMem(gameData: Uint8Array | Promise<Uint8Array>): Promise<Chip8Memory> {
-		// These are the number of pages allocated to the binary. Each page has 64KiB
-		let memory = new WebAssembly.Memory({ initial: 2, maximum: 2 });
-		const imports = {
-			env: genEnv(memory)
-		};
-		// TODO: Fetch binary and game in parallel
-		const [source, gameBuf] = await Promise.all([
-			await WebAssembly.instantiateStreaming(fetch('/chip-8.wasm'), imports),
+	async function init(): Promise<void> {
+		const [_chip8, game] = await Promise.all([
+			Chip8.init({
+				code: fetch('/chip-8.wasm'),
+				audio,
+				seed,
+				clockFrequencyHz,
+				quirks
+			}),
 			gameData
 		]);
-
-		const wholeMem = new Uint8Array(memory.buffer, 0, gameBuf.byteLength);
-		wholeMem.set(gameBuf);
-
-		exports = source.instance.exports as unknown as Chip8Exports;
-		exports.init(
-			seed,
-			performance.now(),
-			clockFrequencyHz,
-			quirks.shift,
-			quirks.register,
-			wholeMem.byteOffset,
-			wholeMem.byteLength
-		);
-		const memPtr: number = exports.getMemPtr();
-		return new Chip8Memory(memory.buffer, memPtr);
+		chip8 = _chip8;
+		chip8.loadGame(game);
+		enableTimers();
 	}
 
 	function enableTimers() {
-		timerInterval = setInterval(() => {
-			exports?.timerTick();
-			if (exports?.getSoundTimer() > 0) {
-				audio?.play();
-			}
-		}, 16.667);
-
+		timerInterval = setInterval(() => chip8.timerTick(), 16.667);
 		return () => clearInterval(timerInterval);
 	}
 
-	function play(mem: Chip8Memory): void {
-		exports?.setCurrentTime(performance.now());
-		function loop(time: DOMHighResTimeStamp): void {
-			exports?.onAnimationFrame(time);
+	async function resetAndLoad(gameData: Promise<Uint8Array>) {
+		chip8.reset();
+		const game = await gameData;
+		chip8.loadGame(game);
+	}
+
+	function play(): void {
+		function loop(): void {
+			chip8.step();
 			animationFrame = requestAnimationFrame(loop);
-			PC = mem.PC;
-			SP = mem.SP;
-			registers = mem.registers;
-			stack = mem.stack;
+			PC = chip8.PC;
+			SP = chip8.SP;
+			registers = chip8.registers;
+			stack = chip8.stack;
 		}
+		chip8.resume();
 		enableTimers();
 		animationFrame = requestAnimationFrame(loop);
 		paused = false;
@@ -124,43 +70,27 @@
 		paused = true;
 	}
 
-	function toggle(mem: Chip8Memory): void {
+	function toggle(): void {
 		if (paused) {
-			play(mem);
+			play();
 		} else {
 			pause();
 		}
 	}
-
-	function keydownHandler(e: KeyboardEvent): void {
-		const codepoint = e.key.codePointAt(0);
-		if (codepoint === undefined) {
-			return;
-		}
-		exports?.onKeydown(codepoint);
-	}
-
-	function keyupHandler(e: KeyboardEvent): void {
-		const codepoint = e.key.codePointAt(0);
-		if (codepoint === undefined) {
-			return;
-		}
-		exports?.onKeyup(codepoint);
-	}
 </script>
 
-{#await setupMem(gameData)}
+{#await init()}
 	<p>Loading...</p>
-{:then mem}
+{:then}
 	<Canvas
 		pixelSize={20}
-		buffer={mem.display}
-		on:keydown={keydownHandler}
-		on:keyup={keyupHandler}
-		on:focus={() => play(mem)}
+		buffer={chip8.display}
+		on:keydown={(e) => chip8.onKeydown(e.key)}
+		on:keyup={(e) => chip8.onKeyup(e.key)}
+		on:focus={play}
 		on:blur={pause}
 	/>
-	<button on:click={() => toggle(mem)}><h1>{paused ? 'Play' : 'Pause'}</h1></button>
+	<button on:click={toggle}>{paused ? 'Play' : 'Pause'}</button>
 
 	<div>
 		<p>seed: {seed}</p>

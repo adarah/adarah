@@ -10,7 +10,7 @@
 	import { browser } from '$app/env';
 	import Chip8 from '$lib/chip-8';
 
-	let gameTitle: string;
+	let gameTitle: string = 'INVADERS';
 	let gameData: Promise<Uint8Array>;
 	$: {
 		if (browser) {

@@ -39,6 +39,8 @@ pub const Loader = struct {
         // these, 0x00E0, clears the display RAM by setting all the bits to zero. The second, 0x004B, calls a
         // machine language routine within the interpreter that switches the VIP’s display on
         buf[0x1FC..0x200].* = .{ 0x00, 0xE0, 0x00, 0x4B };
+        // These are the initial values for PC, SP, and I respectively
+        buf[0x50..0x56].* = .{ 0x01, 0xFC, 0x0E, 0xCF, 0x00, 0x00 };
 
         // These bytes show the text COSMAC on the screen. It's ok to have them here since they will be wiped by the
         // initial 0x00E0 instruction at the start of any program
@@ -80,7 +82,7 @@ test "Loader loads fonts" {
         if (i < 0x50) {
             // Fonts
             try expectEqual(u8, Loader.FONTS[i], byte);
-        } else if (i == 0x1FD or i == 0x1FF) {
+        } else if (i == 0x1FD or i == 0x1FF or (0x50 <= i and i < 0x54)) {
             // Hardcoded instructions
             try expect(byte != 0);
         } else {

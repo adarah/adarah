@@ -2,7 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const wasm = @import("./wasm.zig");
 const util = @import("./util.zig");
-const c = @import("./consts.zig");
 const Cpu = @import("./cpu.zig").Cpu;
 const Loader = @import("./loader.zig").Loader;
 const Keypad = @import("./keypad.zig").Keypad;
@@ -25,18 +24,10 @@ export fn init(
     clock_frequency_hz: c_int,
     shift_quirk: bool,
     register_quirk: bool,
-    game_data: [*]const u8,
-    game_length: c_int,
 ) void {
     cpu_clock_frequency_hz = clock_frequency_hz;
     prev_time_ms = start_time;
-
-    Loader.initMem(&mem);
-
-    wasm.info("inited mem", .{});
-    var game = game_data[0..@intCast(usize, game_length)];
-    Loader.loadGame(&mem, game);
-    wasm.info("loaded game", .{});
+    reset();
 
     keypad = Keypad.init();
     sound_timer = Timer.init(0);
@@ -53,15 +44,30 @@ export fn init(
     std.log.info("Initialized emulator!", .{});
 }
 
-export fn onKeydown(keycode: c_int) void {
-    const key = util.keycodeToKeypad(keycode) catch return;
-    keypad.pressKey(key);
+export fn reset() void {
+    Loader.initMem(&mem);
+    std.log.info("inited mem", .{});
+}
+
+export fn loadGame(game_data: [*]const u8, game_length: c_int) void {
+    var game = game_data[0..@intCast(usize, game_length)];
+    Loader.loadGame(&mem, game);
+    std.log.info("loaded game", .{});
+}
+
+export fn onKeydown(key: c_uint) void {
+    if (key >= 16) {
+        return;
+    }
+    keypad.pressKey(@intCast(u4, key));
     std.log.debug("Pressed {}!", .{key});
 }
 
-export fn onKeyup(keycode: c_int) void {
-    const key = util.keycodeToKeypad(keycode) catch return;
-    keypad.releaseKey(key);
+export fn onKeyup(key: c_uint) void {
+    if (key >= 16) {
+        return;
+    }
+    keypad.releaseKey(@intCast(u4, key));
     std.log.debug("Released {}!", .{key});
 }
 
@@ -89,14 +95,13 @@ export fn onAnimationFrame(now_time_ms: c_int) void {
 export fn timerTick() void {
     sound_timer.tick();
     delay_timer.tick();
+    if (sound_timer.value > 0) {
+        wasm.playAudio();
+    }
 }
 
 export fn getMemPtr() [*]u8 {
     return cpu.mem;
-}
-
-export fn getSoundTimer() c_uint {
-    return sound_timer.value;
 }
 
 export fn setCurrentTime(now_time_ms: c_int) void {

@@ -9,10 +9,7 @@ const mf = new Miniflare({
     watch: true
 });
 
-// await mf.dispatchFetch('http://localhost:6000')
 const env = await mf.getBindings();
-const bucket = await mf.getR2Bucket('chip-8');
-env['chip-8'] = bucket;
-await bucket.put('foo', '1234');
+env['chip-8'] = await mf.getR2Bucket('chip-8');
 // @ts-expect-error
 export const miniflarePlatform: App.Platform = { env };
