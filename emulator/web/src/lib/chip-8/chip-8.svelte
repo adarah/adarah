@@ -39,7 +39,7 @@
 	import Canvas from './canvas.svelte';
 	import { Chip8Memory } from './chip-8-memory';
 
-	export let gameName: string;
+	export let gameData: Uint8Array | Promise<Uint8Array>;
 	export let seed: number = getRandomSeed();
 	export let clockFrequencyHz: number = 500;
 	export let quirks: Chip8Quirks = {
@@ -63,18 +63,17 @@
 		enableTimers();
 		audio = new Audio('/beep3.ogg');
 	});
-	async function setupMem(gameName: string): Promise<Chip8Memory> {
+	async function setupMem(gameData: Uint8Array | Promise<Uint8Array>): Promise<Chip8Memory> {
 		// These are the number of pages allocated to the binary. Each page has 64KiB
 		let memory = new WebAssembly.Memory({ initial: 2, maximum: 2 });
 		const imports = {
 			env: genEnv(memory)
 		};
 		// TODO: Fetch binary and game in parallel
-		const [source, gameRes] = await Promise.all([
+		const [source, gameBuf] = await Promise.all([
 			await WebAssembly.instantiateStreaming(fetch('/chip-8.wasm'), imports),
-			await fetch(`/games/${gameName}`).then((d) => d.arrayBuffer())
+			gameData
 		]);
-		const gameBuf = new Uint8Array(gameRes);
 
 		const wholeMem = new Uint8Array(memory.buffer, 0, gameBuf.byteLength);
 		wholeMem.set(gameBuf);
@@ -150,7 +149,7 @@
 	}
 </script>
 
-{#await setupMem(gameName)}
+{#await setupMem(gameData)}
 	<p>Loading...</p>
 {:then mem}
 	<Canvas
@@ -171,7 +170,6 @@
 		<p>Stack: {stack}</p>
 		<p>clock speed: {clockFrequencyHz}</p>
 		<p>quirks: {JSON.stringify(quirks)}</p>
-		<p>{gameName}</p>
 	</div>
 {:catch err}
 	<p>Some error: {err}</p>

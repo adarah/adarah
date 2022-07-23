@@ -1,13 +1,20 @@
-import type { RequestEvent, RequestHandlerOutput } from "@sveltejs/kit";
-import fs from 'fs/promises';
-import path from 'path';
+import type { RequestHandler } from './__types/[title]'
 
-export async function GET(event: RequestEvent): Promise<RequestHandlerOutput> {
-    const data = await fs.readFile(path.resolve(`./static/c8/${event.params.title}`))
+export const GET: RequestHandler = async ({ platform, params }) => {
+    const gameData = await platform.env["chip-8"].get(params.title);
+    if (gameData === null) {
+        return {
+            status: 404,
+            headers: {
+                'Cache-Control': 'max-age=31536000'
+            }
+        };
+    }
     return {
         headers: {
-            'Content-Type': 'application/octet-stream'
+            'Content-Type': 'application/octet-stream',
+            'Cache-Control': 'max-age=31536000'
         },
-        body: new Uint8Array(data)
+        body: gameData.body
     }
 }
