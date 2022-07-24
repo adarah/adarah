@@ -43,8 +43,9 @@ export class Chip8 {
     private static readonly DISPLAY_OFFSET = 0xF00;
     private static readonly DISPLAY_SIZE = 0x100;
 
-    public readonly array: Uint8Array;
+    public readonly clockFrequencyHz: number;
 
+    private readonly array: Uint8Array;
     private readonly baseOffset: number;
     private readonly exports: Chip8Exports;
 
@@ -70,7 +71,7 @@ export class Chip8 {
             quirks.register,
         );
         const memPtr: number = exports.getMemPtr();
-        return new Chip8(exports, memory.buffer, memPtr);
+        return new Chip8(exports, memory.buffer, memPtr, clockFrequencyHz);
     }
 
     public async loadGame(gameData: Uint8Array): Promise<void> {
@@ -143,7 +144,8 @@ export class Chip8 {
         return new Uint8Array(this.array.buffer, this.baseOffset + Chip8.DISPLAY_OFFSET, Chip8.DISPLAY_SIZE);
     }
 
-    private constructor(exports: Chip8Exports, buffer: ArrayBuffer, offset: number) {
+    private constructor(exports: Chip8Exports, buffer: ArrayBuffer, offset: number, clockFrequencyHz: number) {
+        this.clockFrequencyHz = clockFrequencyHz;
         this.exports = exports;
         this.baseOffset = offset;
         this.array = new Uint8Array(buffer, offset, 4096);

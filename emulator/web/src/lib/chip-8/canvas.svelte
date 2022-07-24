@@ -16,7 +16,9 @@
 
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { blur } from 'svelte/transition';
 
+	export let paused: boolean;
 	export let pixelSize: number;
 	export let buffer: Uint8Array;
 	console.log(buffer);
@@ -25,7 +27,7 @@
 	let ctx: CanvasRenderingContext2D;
 
 	onMount(() => {
-		canvas.tabIndex = 1;
+		console.log('mounted canvas!');
 		canvas.width = pixelSize * 64;
 		canvas.height = pixelSize * 32;
 		ctx = canvas.getContext('2d')!;
@@ -55,14 +57,48 @@
 	}
 </script>
 
-<canvas bind:this={canvas} on:keydown on:keyup on:focus on:blur />
+<div class="container">
+	<canvas
+		tabindex="0"
+		class="item"
+		bind:this={canvas}
+		on:keydown
+		on:keyup
+		on:focus
+		on:blur
+	/>
+	{#if paused}
+		<div class="item" class:paused transition:blur={{ duration: 300 }}>
+			<div class="pause-icon" />
+			<div class="pause-icon" />
+		</div>
+	{/if}
+</div>
 
 <style>
-	canvas:focus {
-		border: solid 15px black;
+	.item {
+		width: 50%;
+	}
+	.container {
+		position: relative;
 	}
 
-	canvas {
-		border: solid 15px red;
+	.paused {
+		position: absolute;
+		pointer-events: none;
+		inset: 0px;
+		background-color: black;
+		opacity: 0.8;
+		display: flex;
+		column-gap: 5%;
+		justify-content: center;
+		align-items: center;
+	}
+
+	.pause-icon {
+		background-color: white;
+		pointer-events: none;
+		height: 30%;
+		width: 5%;
 	}
 </style>
