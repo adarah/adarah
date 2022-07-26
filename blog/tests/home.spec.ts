@@ -12,8 +12,9 @@ test.describe('homepage', () => {
 	});
 
 	test('homepage has a picture', async ({ page }) => {
-		expect(await page.locator('figure').count()).toBe(1);
-		expect(await page.locator('img').count()).toBe(1);
-		expect(await page.locator('figcaption').count()).toBe(1);
+		const homePicture = page.locator('data-testid=home-picture');
+		expect(await homePicture.count()).toBe(1);
+		expect(await homePicture.locator('img').count()).toBe(1);
+		expect(await homePicture.locator('figcaption').count()).toBe(1);
 	})
 })
