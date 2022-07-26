@@ -5,16 +5,19 @@ test.describe('homepage', () => {
 		await page.goto('/');
 	})
 
-	test('homepage has expected title, h1, and description', async ({ page }) => {
-		expect(await page.textContent('h1')).toBe("Lucas Harada's blog");
-		expect(await page.textContent('h2')).toBe('A place for me to write down ideas, lessons, and whatever comes to mind.');
-		expect(await page.title()).toBe("Home | Lucas Harada's blog")
+	test('has expected title, h1, and description', async ({ page }) => {
+		await expect(page).toHaveTitle("Home | Lucas Harada's blog");
+		await expect(page.locator('"Lucas Harada\'s blog"')).toBeVisible();
+		await expect(page.locator('"A place for me to write down ideas, lessons, and whatever comes to mind."')).toBeVisible();
 	});
 
-	test('homepage has a picture', async ({ page }) => {
-		const homePicture = page.locator('data-testid=home-picture');
-		expect(await homePicture.count()).toBe(1);
-		expect(await homePicture.locator('img').count()).toBe(1);
-		expect(await homePicture.locator('figcaption').count()).toBe(1);
+	test('has a picture', async ({ page }) => {
+		const homePicture = page.locator('figure');
+		await expect(homePicture).toBeVisible();
+		await expect(homePicture.locator('img')).toBeVisible();
+
+		const caption = homePicture.locator('figcaption');
+		await expect(caption).toHaveCSS('font-style', 'italic');
+		await expect(caption).toBeVisible();
 	})
 })
