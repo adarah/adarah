@@ -1,27 +1,37 @@
 import { expect, type Locator, test } from '@playwright/test';
 
 test.describe('layout', () => {
-  test('uses flebox', async ({ page }) => {
-    const root = page.locator('data-testid=root');
-    expect(root).toHaveCSS('display', 'flex');
-  });
+  const pagesToTest = ['/'];
+  for (let p of pagesToTest) {
+    test.beforeEach(async ({ page }) => {
+      await page.goto(p);
+    });
 
-  test('has a main tag which wraps slots', async ({ page }) => {
-    const main = page.locator('main');
-    expect(main).toHaveCount(1);
-    // TODO: Figure out how to write a test to check if the main tag actually wraps the page's contents
-  });
+    test('uses flebox and maxes height', async ({ page }) => {
+      const root = page.locator('id=root');
+      await expect(root).toBeVisible();
+      await expect(root).toHaveCSS('display', 'flex');
+      await expect(root).toHaveCSS('height', '100%');
+    });
+
+    test('has a main tag which wraps slots', async ({ page }) => {
+      const main = page.locator('main');
+      await expect(main).toHaveCount(1);
+      // TODO: Figure out how to write a test to check if the main tag actually wraps the page's contents
+    });
+  }
 
   test.describe('sidebar', () => {
     let sidebar: Locator;
     test.beforeEach(async ({ page }) => {
+      await page.goto('/');
       sidebar = page.locator('data-testid=sidebar');
     });
 
-    test('has a picture, name and current job', async () => {
-      await expect(sidebar.locator('img')).toHaveCount(1);
-      await expect(sidebar.locator('"Lucas Harada"')).toHaveCount(1);
-      await expect(sidebar.locator('"Software Engineer @"')).toHaveCount(1);
+    test('has a picture, name and current job', async ({ page }) => {
+      await expect(sidebar.locator('img')).toBeVisible();
+      await expect(sidebar.locator('h1', { hasText: "Lucas Harada" })).toBeVisible();
+      await expect(sidebar.locator('text=Software Engineer @')).toBeVisible();
     });
 
     test('has nav links', async () => {
@@ -30,19 +40,29 @@ test.describe('layout', () => {
 
       const links = nav.locator('a');
       await expect(links).toHaveCount(4);
-      await expect(links.locator('"Home"')).toBeVisible();
-      await expect(links.locator('"Posts"')).toBeVisible();
-      await expect(links.locator('"Projects"')).toBeVisible();
-      await expect(links.locator('"Resume"')).toBeVisible();
+
+      const linkMap = {
+        Home: '/',
+        Posts: '/posts',
+        Projects: '/projects',
+        Resume: '/resume',
+      };
+      await Promise.all(
+        Object.entries(linkMap).map(async ([name, href]) => {
+          const l = links.locator(`text=${name}`);
+          await expect(l).toBeVisible();
+          await expect(l).toHaveAttribute('href', href);
+        })
+      )
     });
 
     test('has contact info', async () => {
       const address = sidebar.locator('address');
       await expect(address.locator('a')).toHaveCount(4);
-      await expect(address.locator('"Lucas Harada"')).toBeVisible();
-      await expect(address.locator('"+55"')).toBeVisible();
-      await expect(address.locator('"@gmail.com"')).toBeVisible();
-      await expect(address.locator('"adarah"')).toBeVisible();
+      await expect(address.locator('text=Lucas Harada')).toBeVisible();
+      await expect(address.locator('text=+55')).toBeVisible();
+      await expect(address.locator('text=@gmail.com')).toBeVisible();
+      await expect(address.locator('text=adarah')).toBeVisible();
     });
 
     test('minimizes when pressing the arrow button', async () => {
@@ -52,9 +72,9 @@ test.describe('layout', () => {
       minizeButton.click();
 
       // Minimizing should hide all images and links
-      await expect(sidebar.locator('img')).toBeEmpty();
-      await expect(sidebar.locator('nav')).toBeEmpty();
-      await expect(sidebar.locator('address')).toBeEmpty();
+      await expect(sidebar.locator('img')).not.toBeVisible();
+      await expect(sidebar.locator('nav')).not.toBeVisible();
+      await expect(sidebar.locator('address')).not.toBeVisible();
 
       // But not the button to expand the sidebar
       await expect(minizeButton).toBeVisible();
