@@ -2,8 +2,9 @@
 title: First post
 date: '2022-07-27'
 ---
+Why I made this blog
+---
 It took me about a day to get this blog up and running, but it's finally working! Yeah, it's still a little ugly but it's a working MVP, which is more than I could say about a lot of my abandoned side projects.
-
 ![Screenshot of the homepage as of 2022-07-27](/01-first-post/homepage.png)
 *Could use some work, but I'll get to that eventually.*
 

@@ -20,7 +20,8 @@
   export let articles: Article[];
 </script>
 
-{#each articles as { title, path, date }}
+{#each articles as { title, path, date, excerpt }}
   <p><a href={path}>{title}</a></p>
+  <p>{excerpt}</p>
   <p>{date}</p>
 {/each}

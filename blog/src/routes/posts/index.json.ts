@@ -1,18 +1,28 @@
+import fs from 'fs/promises';
+import matter from 'gray-matter';
+import path from 'path';
 import type { RequestHandler } from './__types/index.json';
 
 export interface Article {
   title: string
   path: string
+  excerpt: string
   date: string
 };
 
 export const GET: RequestHandler<Article[]> = async () => {
-  const markdownFiles = import.meta.glob('./*.md');
-  const proms = Object.entries(markdownFiles).map(async ([path, module]) => {
-    const { metadata } = await module() as { metadata: Article };
-    // removes "./"" from the start, and ".md" from the end
-    metadata.path = '/posts/' + path.slice(2, -3);
-    return metadata;
+  const postsPath = 'src/routes/posts'
+  const files = await fs.readdir(postsPath);
+  const markdownFiles = files.filter(f => path.extname(f) === '.md');
+  const proms = markdownFiles.map(async (f) => {
+    const contents = await fs.readFile(`${postsPath}/${f}`, 'utf-8');
+    const parsed = matter(contents, { excerpt: true });
+    return {
+      ...parsed.data,
+      excerpt: parsed.excerpt,
+      // removes ".md" from the end
+      path: '/posts/' + f.slice(0, -3)
+    };
   });
   const parsedEntries = await Promise.all(proms);
   const articles: Article[] = parsedEntries.filter((a): a is Article => a !== undefined);

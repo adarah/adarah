@@ -1,6 +1,7 @@
 <script context="module" lang="ts">
   import type { Load } from './__types/__layout';
 
+  // This load function is used to expose frontmatter metadata to the layout files above
   export const load: Load = async ({ url, fetch }) => {
     // Do not attempt to fetch post if we are requesting /posts
     // That path is only for listing them
