@@ -6,7 +6,6 @@
       return {status: 404};
     }
     const articles = await res.json();
-    console.log(articles);
     return {
       status: 200,
       props: {
@@ -19,10 +18,9 @@
 <script lang="ts">
   import type { Article } from './list';
   export let articles: Article[];
-  // console.log(articles);
 </script>
 
-{#each articles as { title, slug, date }}
-  <p><a href={slug}>{title}</a></p>
+{#each articles as { title, path, date }}
+  <p><a href={path}>{title}</a></p>
   <p>{date}</p>
 {/each}
