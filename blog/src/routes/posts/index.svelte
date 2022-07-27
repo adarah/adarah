@@ -1,7 +1,7 @@
 <script context="module" lang="ts">
   import type { Load } from './__types/index';
   export const load: Load = async ({ fetch }) => {
-    const res = await fetch('/posts/list');
+    const res = await fetch('/posts.json');
     if (res === null) {
       return {status: 404};
     }
@@ -16,9 +16,8 @@
 </script>
 
 <script lang="ts">
-  import type { Article } from './list';
+  import type { Article } from './index.json';
   export let articles: Article[];
-  console.log(articles);
 </script>
 
 {#each articles as { title, path, date }}

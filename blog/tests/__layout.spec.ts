@@ -59,12 +59,10 @@ test.describe('layout', () => {
     });
 
     test('minimizes when pressing the arrow button', async ({ page }) => {
-      const maximizeButton = page.locator('"▶"');
-      const minizeButton = page.locator('"◀"');
-      await expect(minizeButton).toBeVisible();
-      await expect(maximizeButton).toBeHidden();
+      const sidebarControl = page.locator('data-testid=sidebar-control');
+      await expect(sidebarControl).toBeVisible();
 
-      minizeButton.click();
+      sidebarControl.click();
 
       // Minimizing should hide all images and links
       await expect(sidebar.locator('img')).toBeHidden();
@@ -72,8 +70,7 @@ test.describe('layout', () => {
       await expect(sidebar.locator('address')).toBeHidden();
 
       // But not the button to expand the sidebar
-      await expect(minizeButton).toBeHidden();
-      await expect(maximizeButton).toBeVisible();
+      await expect(sidebarControl).toBeVisible();
     });
   });
 });

@@ -14,7 +14,7 @@
 
 <div id="root" data-testid="root">
   <Sidebar open={sidebarOpen} />
-  <div class="button">
+  <div class="button" data-testid="sidebar-control">
     {#if sidebarOpen}
       <CaretLeft on:click={handleClick} />
     {:else}

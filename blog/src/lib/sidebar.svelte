@@ -86,25 +86,4 @@
     display: inline;
     vertical-align: text-bottom;
   }
-
-  .button {
-    flex-shrink: 0;
-    flex-grow: 0;
-    transform: translateX(-8px);
-    align-self: center;
-    background-color: aliceblue;
-    border: solid 1px gray;
-    border-radius: 100%;
-    width: var(--button-size);
-    transition: background-color 0.3s;
-  }
-  .button :global(svg) {
-    vertical-align: center;
-    width: var(--button-size);
-    height: var(--button-size);
-  }
-
-  .button:hover {
-    background-color: gray;
-  }
 </style>
