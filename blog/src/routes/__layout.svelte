@@ -32,8 +32,8 @@
 
     <footer>
       <address>
-        <a href="https://www.linkedin.com/in/lucas-harada/"><LinkedIn /> Lucas Harada</a>
-        <a href="mailto:lucasyharada@gmail.com"><Email /> lucasyharada@gmail.com</a>
+        <a href="https://www.linkedin.com/in/lucas-harada/"><LinkedIn /> lucas-harada</a>
+        <a href="mailto:lucasyharada@gmail.com"><Email /> lucasYharada@gmail.com</a>
         <a href="https://wa.me/5511995934114"><Whatsapp /> +55 (11) 99593-4114</a>
         <a href="https://github.com/adarah"><Github /> adarah</a>
       </address>

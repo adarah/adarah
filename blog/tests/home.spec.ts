@@ -7,10 +7,8 @@ test.describe('homepage', () => {
 
   test('has expected title, h1, and description', async ({ page }) => {
     await expect(page).toHaveTitle("Home | Lucas Harada's blog");
-    await expect(page.locator('"Lucas Harada\'s blog"')).toBeVisible();
-    await expect(
-      page.locator('"A place for me to write down ideas, lessons, and whatever comes to mind."'),
-    ).toBeVisible();
+    await expect(page.locator('"Welcome to my blog!"')).toBeVisible();
+    await expect(page.locator('p')).toBeVisible();
   });
 
   test('has a picture', async ({ page }) => {

@@ -52,7 +52,7 @@ test.describe('layout', () => {
     test('has contact info', async () => {
       const address = sidebar.locator('address');
       await expect(address.locator('a')).toHaveCount(4);
-      await expect(address.locator('text=Lucas Harada')).toBeVisible();
+      await expect(address.locator('"lucas-harada"')).toBeVisible();
       await expect(address.locator('text=+55')).toBeVisible();
       await expect(address.locator('text=@gmail.com')).toBeVisible();
       await expect(address.locator('text=adarah')).toBeVisible();
