@@ -1,4 +1,19 @@
+body {
+  font-family: 'Work Sans';
+}
+
 /* captions should be italic */
 figcaption {
   font-style: italic;
 }
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Archivo Narrow';
+  text-align: center;
+}
+

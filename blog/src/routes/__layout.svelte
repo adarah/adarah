@@ -18,9 +18,9 @@
 <div id="root" data-testid="root">
   <div class="sidebar" class:collapse={!maximized} data-testid="sidebar">
     <header>
-      <img src="/placeholder.jpeg" alt="My face" />
+      <img src="/avatar.png" alt="A manga-style drawing of Marill" />
       <h1>Lucas Harada</h1>
-      <h2>Software Engineer @ Trilogy</h2>
+      <h2>Software Engineer</h2>
     </header>
 
     <nav>
@@ -55,22 +55,31 @@
   #root {
     display: flex;
     height: 100%;
-    --sidebar-width: 350px;
+    --sidebar-width: 250px;
+    --padding-top: 50px;
+    --padding-bottom: 30px;
+    --button-size: 30px
+  }
+  main {
+    padding-top: var(--padding-top);
+    padding-bottom: var(--padding-bottom);
+    padding-right: var(--button-size);
   }
 
   .sidebar {
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
     align-items: center;
     border: solid 1px brown;
     background-color: antiquewhite;
-    padding: 50px 30px;
+    padding-bottom: var(--padding-bottom);
+    flex-grow: 0;
+    flex-shrink: 0;
 
     width: var(--sidebar-width);
 
     transition-property: margin-left, opacity, visibility;
-    transition-duration: 0.5s;
+    transition-duration: 0.4s;
     transition-timing-function: ease;
 
     margin-left: 0;
@@ -86,6 +95,18 @@
 
   .sidebar a {
     display: block;
+  }
+  .sidebar header h1 {
+    flex-grow: 1;
+    margin-top: 10px
+  }
+  .sidebar nav {
+    /* background-color: green; */
+    display: flex;
+    justify-content: center;
+    flex-direction: column;
+    flex-grow: 1;
+    font-size: x-large;
   }
 
   .sidebar a:visited {
@@ -114,14 +135,13 @@
     background-color: aliceblue;
     border: solid 1px gray;
     border-radius: 100%;
-    width: 30px;
-    height: 30px;
+    width: var(--button-size);
     transition: background-color 0.3s;
   }
   .button :global(svg) {
     vertical-align: center;
-    width: 30px;
-    height: 30px;
+    width: var(--button-size);
+    height: var(--button-size);
   }
 
   .button:hover {

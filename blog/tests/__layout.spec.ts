@@ -24,7 +24,7 @@ test.describe('layout', () => {
     test('has a picture, name and current job', async ({ page }) => {
       await expect(sidebar.locator('img')).toBeVisible();
       await expect(sidebar.locator('h1', { hasText: "Lucas Harada" })).toBeVisible();
-      await expect(sidebar.locator('text=Software Engineer @')).toBeVisible();
+      await expect(sidebar.locator('"Software Engineer"')).toBeVisible();
     });
 
     test('has nav links', async () => {
