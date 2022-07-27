@@ -1,20 +1,13 @@
 import { expect, type Locator, test } from '@playwright/test';
 
 test.describe('layout', () => {
-  const pagesToTest = ['/'];
+  const pagesToTest = ['/', '/posts', '/projects', '/resume'];
   for (let p of pagesToTest) {
     test.beforeEach(async ({ page }) => {
       await page.goto(p);
     });
 
-    test('uses flebox and maxes height', async ({ page }) => {
-      const root = page.locator('id=root');
-      await expect(root).toBeVisible();
-      await expect(root).toHaveCSS('display', 'flex');
-      await expect(root).toHaveCSS('height', '100%');
-    });
-
-    test('has a main tag which wraps slots', async ({ page }) => {
+    test(`has a main tag which wraps ${p}'s slots`, async ({ page }) => {
       const main = page.locator('main');
       await expect(main).toHaveCount(1);
       // TODO: Figure out how to write a test to check if the main tag actually wraps the page's contents
@@ -65,20 +58,22 @@ test.describe('layout', () => {
       await expect(address.locator('text=adarah')).toBeVisible();
     });
 
-    test('minimizes when pressing the arrow button', async () => {
-      const minizeButton = sidebar.locator('"◀"');
+    test('minimizes when pressing the arrow button', async ({ page }) => {
+      const maximizeButton = page.locator('"▶"');
+      const minizeButton = page.locator('"◀"');
       await expect(minizeButton).toBeVisible();
+      await expect(maximizeButton).toBeHidden();
 
       minizeButton.click();
 
       // Minimizing should hide all images and links
-      await expect(sidebar.locator('img')).not.toBeVisible();
-      await expect(sidebar.locator('nav')).not.toBeVisible();
-      await expect(sidebar.locator('address')).not.toBeVisible();
+      await expect(sidebar.locator('img')).toBeHidden();
+      await expect(sidebar.locator('nav')).toBeHidden();
+      await expect(sidebar.locator('address')).toBeHidden();
 
       // But not the button to expand the sidebar
-      await expect(minizeButton).toBeVisible();
-      await expect(minizeButton).toHaveText('▶');
+      await expect(minizeButton).toBeHidden();
+      await expect(maximizeButton).toBeVisible();
     });
   });
 });

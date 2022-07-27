@@ -53,15 +53,19 @@
     flex-direction: column;
     align-items: center;
     width: var(--sidebar-width);
-    transition-property: margin-left, opacity;
+    transition-property: margin-left, opacity, visibility;
     transition-duration: 0.5s;
-    opacity: 1;
+    transition-timing-function: ease;
+
     margin-left: 0;
+    opacity: 1;
+    visibility: visible;
   }
 
   .collapse {
-    opacity: 0;
     margin-left: calc(-1 * var(--sidebar-width));
+    opacity: 0;
+    visibility: hidden;
   }
 
   .sidebar a {
@@ -81,8 +85,8 @@
   }
 
   main {
-    /* padding: 0 200px; */
-    width: max-content;
+    width: 90%;
+    max-width: 700px;
     margin: 0 auto;
   }
 </style>
