@@ -18,6 +18,7 @@
 <script lang="ts">
   import type { Article } from './list';
   export let articles: Article[];
+  console.log(articles);
 </script>
 
 {#each articles as { title, path, date }}

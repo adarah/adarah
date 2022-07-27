@@ -1,6 +1,8 @@
-<svelte:head>
-  <title>Home | Lucas Harada's blog</title>
-</svelte:head>
+<script>
+import Title from "$lib/title.svelte";
+</script>
+
+<Title title="Home"/>
 <article>
   <header>
     <h1>Welcome to my blog!</h1>
