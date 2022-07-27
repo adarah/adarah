@@ -3,6 +3,8 @@
   import Github from '$lib/icons/github.svelte';
   import LinkedIn from '$lib/icons/linkedin.svelte';
   import Whatsapp from '$lib/icons/whatsapp.svelte';
+  import CaretLeft from '$lib/icons/caret-left.svelte';
+  import CaretRight from '$lib/icons/caret-right.svelte';
   import '../styles/globals.css';
   import '../styles/reset.css';
 
@@ -15,9 +17,11 @@
 
 <div id="root" data-testid="root">
   <div class="sidebar" class:collapse={!maximized} data-testid="sidebar">
-    <img src="/placeholder.jpeg" alt="My face" />
-    <h1>Lucas Harada</h1>
-    <h2>Software Engineer @ Trilogy</h2>
+    <header>
+      <img src="/placeholder.jpeg" alt="My face" />
+      <h1>Lucas Harada</h1>
+      <h2>Software Engineer @ Trilogy</h2>
+    </header>
 
     <nav>
       <a href="/">Home</a>
@@ -26,16 +30,22 @@
       <a href="/resume">Resume</a>
     </nav>
 
-    <address>
-      <a href="https://www.linkedin.com/in/lucas-harada/"><LinkedIn /> Lucas Harada</a>
-      <a href="mailto:lucasyharada@gmail.com"><Email /> lucasyharada@gmail.com</a>
-      <a href="https://wa.me/5511995934114"><Whatsapp /> +55 (11) 99593-4114</a>
-      <a href="https://github.com/adarah"><Github /> adarah</a>
-    </address>
+    <footer>
+      <address>
+        <a href="https://www.linkedin.com/in/lucas-harada/"><LinkedIn /> Lucas Harada</a>
+        <a href="mailto:lucasyharada@gmail.com"><Email /> lucasyharada@gmail.com</a>
+        <a href="https://wa.me/5511995934114"><Whatsapp /> +55 (11) 99593-4114</a>
+        <a href="https://github.com/adarah"><Github /> adarah</a>
+      </address>
+    </footer>
   </div>
-  <button on:click={handleClick} title={maximized ? 'Hide sidebar' : 'Show sidebar'}>
-    {maximized ? '◀' : '▶'}
-  </button>
+  <div class="button">
+    {#if maximized}
+      <CaretLeft on:click={handleClick} />
+    {:else}
+      <CaretRight on:click={handleClick} />
+    {/if}
+  </div>
   <main>
     <slot />
   </main>
@@ -51,8 +61,14 @@
   .sidebar {
     display: flex;
     flex-direction: column;
+    justify-content: space-between;
     align-items: center;
+    border: solid 1px brown;
+    background-color: antiquewhite;
+    padding: 50px 30px;
+
     width: var(--sidebar-width);
+
     transition-property: margin-left, opacity, visibility;
     transition-duration: 0.5s;
     transition-timing-function: ease;
@@ -88,5 +104,27 @@
     width: 90%;
     max-width: 700px;
     margin: 0 auto;
+  }
+
+  .button {
+    flex-shrink: 0;
+    flex-grow: 0;
+    transform: translateX(-8px);
+    align-self: center;
+    background-color: aliceblue;
+    border: solid 1px gray;
+    border-radius: 100%;
+    width: 30px;
+    height: 30px;
+    transition: background-color 0.3s;
+  }
+  .button :global(svg) {
+    vertical-align: center;
+    width: 30px;
+    height: 30px;
+  }
+
+  .button:hover {
+    background-color: gray;
   }
 </style>
