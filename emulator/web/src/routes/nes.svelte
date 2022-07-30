@@ -10,14 +10,13 @@
 	let program: WebGLProgram;
 	let uniforms: Record<string, WebGLUniformLocation | null>;
 	let attributes: Record<string, number>;
-	let fadeFactor: number = 0.5;
-	let prevTime: DOMHighResTimeStamp = performance.now();
+	let timer: DOMHighResTimeStamp = performance.now() / 1000;
 
 	onMount(async () => {
 		await main();
 		function loop() {
 			render();
-			updateFadeFactor();
+			updateTimer();
 			requestAnimationFrame(loop);
 		}
 		requestAnimationFrame(loop);
@@ -40,8 +39,10 @@
 	}
 
 	function render(): void {
+		gl.clearColor(0.1, 0.1, 0.1, 1);
+		gl.clear(gl.COLOR_BUFFER_BIT);
 		gl.useProgram(program);
-		gl.uniform1f(uniforms.fadeFactor, fadeFactor);
+		gl.uniform1f(uniforms.timer, timer);
 
 		gl.activeTexture(gl.TEXTURE0);
 		gl.bindTexture(gl.TEXTURE_2D, textures[0]);
@@ -53,7 +54,7 @@
 
 		gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
 		// Float32 takes 4 bytes, and we want to skip over 2 of them
-		gl.vertexAttribPointer(attributes.position, 2, gl.FLOAT, false, 4 * 2, 0);
+		gl.vertexAttribPointer(attributes.position, 4, gl.FLOAT, false, 4 * 4, 0);
 		gl.enableVertexAttribArray(attributes.position);
 
 		gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, elementBuffer);
@@ -63,15 +64,14 @@
 		gl.disableVertexAttribArray(attributes.position);
 	}
 
-	function updateFadeFactor() {
-		const now = performance.now();
-		const elapsed = prevTime - performance.now();
-		fadeFactor = Math.sin(elapsed * 0.1) * 0.5 + 0.5;
-		prevTime = now;
+	function updateTimer() {
+		timer = performance.now() / 1000;
 	}
 
 	async function makeResources(): Promise<void> {
-		const glVertexBufferData = new Float32Array([-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0]);
+		const glVertexBufferData = new Float32Array([
+			-1, -1, 0, 1, 1, -1, 0, 1, -1, 1, 0, 1, 1, 1, 0, 1
+		]);
 		const glElementBufferData = new Uint16Array([0, 1, 2, 3]);
 		vertexBuffer = makeBuffer(gl.ARRAY_BUFFER, glVertexBufferData);
 		elementBuffer = makeBuffer(gl.ELEMENT_ARRAY_BUFFER, glElementBufferData);
@@ -83,11 +83,11 @@
 		]);
 		program = makeProgram();
 
-		const fadeFactor = gl.getUniformLocation(program, 'fade_factor');
+		const timer = gl.getUniformLocation(program, 'timer');
 		const texture0 = gl.getUniformLocation(program, 'textures[0]');
 		const texture1 = gl.getUniformLocation(program, 'textures[1]');
 		uniforms = {
-			fadeFactor,
+			timer,
 			texture0,
 			texture1
 		};
