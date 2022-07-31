@@ -14,7 +14,7 @@ pub fn build(b: *std.build.Builder) void {
     lib.initial_memory = 131072;
     lib.max_memory = 131072;
     lib.global_base = 6560;
-    lib.strip = true;
+    lib.strip = false;
     lib.single_threaded = true;
 
     lib.install();
