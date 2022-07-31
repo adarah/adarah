@@ -2,15 +2,20 @@
   import CaretLeft from '$lib/icons/caret-left.svelte';
   import CaretRight from '$lib/icons/caret-right.svelte';
   import Sidebar from '$lib/sidebar.svelte';
+  import { page } from '$app/stores';
   import '../styles/globals.css';
   import '../styles/reset.css';
+  import Seo from '$lib/seo.svelte';
 
   let sidebarOpen: boolean = true;
 
   function handleClick(): void {
     sidebarOpen = !sidebarOpen;
   }
+  // const { post } = $page.stuff;
 </script>
+
+<!-- <Seo title={post.title} /> -->
 
 <div id="root" data-testid="root">
   <Sidebar open={sidebarOpen} />

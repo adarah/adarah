@@ -14,15 +14,19 @@
       props: {
         post,
       },
+      stuff: {
+        post
+      }
     };
   };
 </script>
 
 <script lang="ts">
   import Title from '$lib/title.svelte';
-  import type { Post } from './post';
   import '../../styles/one-dark.css';
-  export let post: Post | undefined;
+  import type { PostFrontmatter } from './post';
+  // Is only undefined if we are on the /posts route
+  export let post: PostFrontmatter | undefined;
 </script>
 
 {#if post !== undefined}
